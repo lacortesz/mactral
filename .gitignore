@@ -1,10 +1,26 @@
 .claude/settings.local.json
 
+# Node / frontend
 node_modules/
-.next/
 dist/
+dist-ssr/
+*.local
+
+# Python / backend
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+htmlcov/
 coverage/
+.coverage
+
+# Env files (contienen secretos locales)
 .env
+
+# Datos locales
 *.db
 *.db-journal
+
+# Artefactos de verificación manual (screenshots, scripts scratch)
 .scratch/

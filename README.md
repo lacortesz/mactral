@@ -1,58 +1,98 @@
 # Grupo Mactral — Plataforma de Gestión de Proyectos
 
-Implementación de la historia **E1-H1 — Gestión de usuarios y roles** (Épica 1,
-ver `HU_AC_Mockups_GrupoMactral_Epica_1.pdf`), con soporte mínimo de login
-(E1-H2) para poder autenticar al rol Gerencia/Administrador.
+Arquitectura de microservicios: **React** (frontend, Vite) + **Python/FastAPI**
+(backend, `services/auth`) + **PostgreSQL**, con Docker para desplegar todo.
 
-Stack: Next.js 14 (App Router) + TypeScript + Prisma/SQLite + Vitest.
+Implementa:
 
-## Puesta en marcha
+- **E1-H1 — Gestión de usuarios y roles**: alta/desactivación de usuarios,
+  asignación de rol y línea de negocio, restringida a Gerencia/Administrador.
+- **E1-H2 — Inicio de sesión seguro**: login con JWT, bloqueo tras 5 intentos
+  fallidos (15 min), expiración de sesión por inactividad, recuperación de
+  contraseña por correo, y control de acceso por módulo según rol.
 
-```bash
-npm install
-cp .env.example .env      # ajustar JWT_SECRET
-npx prisma migrate dev --name init
-npm run prisma:seed       # crea el usuario Gerencia/Admin inicial
-npm run dev
+Ver `HU_AC_Mockups_GrupoMactral_Epica_1.pdf` para las historias de usuario
+originales.
+
+## Estructura
+
+```
+services/auth/   FastAPI + SQLAlchemy + Alembic (usuarios, roles, sesión)
+frontend/        React + Vite + TypeScript (SPA)
+docker-compose.yml
 ```
 
-Usuario inicial (definido en `.env` / `prisma/seed.ts`):
-`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` (por defecto
-`maya@grupomactral.com` / `Mactral2026!`).
+## Puesta en marcha (Docker, recomendado)
 
-Abrir `http://localhost:3000`, iniciar sesión y entrar a **Gestión de
-usuarios** (`/usuarios`).
+```bash
+docker compose up -d --build postgres auth frontend
+docker compose run --rm seed   # crea el usuario Gerencia/Admin inicial
+```
+
+- Frontend: http://localhost:8080
+- API: http://localhost:8000 (docs interactivas en `/docs`)
+- Usuario inicial: `maya@grupomactral.com` / `Mactral2026!` (configurable via
+  `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`)
+
+## Puesta en marcha (desarrollo local, sin Docker)
+
+Backend:
+```bash
+cd services/auth
+python -m venv .venv && source .venv/Scripts/activate  # o .venv/bin/activate en Linux/Mac
+pip install -r requirements-dev.txt
+cp .env.example .env   # ajustar DATABASE_URL a un Postgres local
+alembic upgrade head
+python seed.py
+uvicorn app.main:app --reload
+```
+
+Frontend:
+```bash
+cd frontend
+npm install
+cp .env.example .env
+npm run dev   # http://localhost:5173
+```
 
 ## Pruebas
 
 ```bash
-npm test              # vitest run
-npm run test:coverage # cobertura (umbral 90% líneas/funciones en src/lib)
+cd services/auth
+source .venv/Scripts/activate
+pytest --cov --cov-report=term-missing   # umbral 90%, 96% actual
 ```
 
-## Qué cubre esta implementación
+## Qué cubre cada historia
 
-- **Escenario 1 (alta exitosa)**: formulario nombre/correo/rol/línea de
-  negocio, usuario creado en estado `ACTIVO`, enlace de activación generado
-  (el envío de correo es un stub que registra el enlace en la consola del
-  servidor — no hay proveedor SMTP configurado; ver `src/lib/mailer.ts`).
-- **Escenario 2 (correo duplicado)**: `src/lib/userService.ts` valida
-  unicidad antes de crear y lanza `DuplicateEmailError`.
-- **Escenario 3 (desactivación)**: cambia `status` a `INACTIVO` sin borrar el
-  registro; también se soporta reactivar.
-- **Restricción de rol**: solo `GERENCIA` puede crear/activar/desactivar
-  usuarios (`src/lib/permissions.ts`); el resto de roles ve la lista en modo
-  lectura.
+### E1-H1
+- Alta exitosa → estado `ACTIVO` + enlace de activación (mailer stub, logs).
+- Correo duplicado → 409, sin crear registro.
+- Desactivar/activar → cambia `status`, conserva historial.
+- Solo `GERENCIA` puede gestionar usuarios (`app/domain.py: can_manage_users`).
 
-Fuera de alcance de E1-H1 (pertenecen a E1-H2, no implementadas a fondo):
-bloqueo de cuenta tras 5 intentos fallidos, expiración de sesión por
-inactividad más allá del `maxAge` del JWT, y el guard de "acceso a módulo no
-autorizado" para módulos distintos a `/usuarios`.
+### E1-H2
+- Login exitoso → JWT, redirige a dashboard, solo se listan los módulos
+  permitidos para el rol (`ROLE_MODULE_ACCESS` en `app/domain.py`).
+- Credenciales incorrectas → mensaje genérico; **5 intentos fallidos bloquean
+  la cuenta 15 minutos** (`app/services/auth_service.py`).
+- Acceso a módulo no autorizado (p. ej. Técnico → Financiero) → 403 en la API
+  y redirección a `/dashboard?denied=1` con el mensaje exacto de la historia,
+  tanto si se navega por la UI como por URL directa o llamada a la API.
+- Recuperación de contraseña por correo (`/forgot-password` → token →
+  `/activar-cuenta?token=...`), sin revelar si el correo existe.
+- Política de contraseña: mínimo 8 caracteres, mayúscula, número y carácter
+  especial.
+- Expiración por inactividad: JWT de 8h que el frontend renueva mientras la
+  pestaña está activa (`AuthContext`); si el usuario deja de interactuar, la
+  sesión expira naturalmente 8h después de la última renovación.
 
-## Limitación de este entorno
+Los módulos Comercial/Importaciones/Técnico/Stock/Financiero/Reg. maestro son
+endpoints *stub* (`app/routers/modules.py`): existen solo para poder ejercer
+el control de acceso de E1-H2; su contenido real pertenece a otras épicas.
 
-Esta máquina no tiene Node.js/npm instalados, así que no fue posible
-ejecutar `npm install`, `npm test` ni levantar el servidor de desarrollo para
-verificar visualmente la UI. El código no ha sido compilado ni probado en
-este entorno — revísalo con `npm install && npm test` antes de darlo por
-válido.
+## Notas de la migración de stack
+
+Este proyecto empezó como un monolito Next.js/Prisma/SQLite (historia E1-H1).
+Se migró completamente a React + Python + Postgres a partir de E1-H2 por
+decisión explícita del proyecto (ver `CLAUDE.md`, sección Arquitectura).
