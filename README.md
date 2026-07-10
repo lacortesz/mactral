@@ -80,12 +80,19 @@ npm run dev   # http://localhost:5173
 - Frontend: https://frontend-production-1622.up.railway.app
 - API auth: https://auth-production-b32d.up.railway.app (docs en `/docs`)
 - API projects: https://projects-production-826d.up.railway.app (docs en `/docs`)
+- API comercial: https://comercial-production-7e35.up.railway.app (docs en `/docs`)
 - Usuario inicial: `maya@grupomactral.com` / `Mactral2026!`
 
 Se desplegó con el [Railway CLI](https://docs.railway.com/guides/cli) (no vía
 `docker-compose.yml` directamente — Railway despliega cada servicio por
-separado a partir de su Dockerfile). Proyecto: `mactral`, 4 servicios:
-`Postgres` (plugin gestionado), `auth`, `projects` y `frontend`.
+separado a partir de su Dockerfile). Proyecto: `mactral`, 5 servicios:
+`Postgres` (plugin gestionado), `auth`, `projects`, `comercial` y `frontend`.
+
+> El plan gratuito de Railway tiene un límite de recursos (falló al crear el
+> 5to servicio con "Free plan resource provision limit exceeded"); se
+> resolvió reintentando tras que el plan quedara disponible. Si vuelve a
+> pasar al agregar un servicio nuevo, revisar el plan/límites en el
+> dashboard antes de asumir que es un problema del CLI.
 
 ### Auto-deploy desde GitHub (pendiente de un paso manual)
 
@@ -103,7 +110,13 @@ Pendiente, una sola vez por servicio, desde el dashboard de Railway
 (Settings → Source → Root Directory):
 - `auth` → `services/auth`
 - `projects` → `services/projects`
+- `comercial` → `services/comercial`
 - `frontend` → `frontend`
+
+`projects` y `comercial` ni siquiera están conectados todavía a GitHub (solo
+`auth` y `frontend` lo están); se agregaron directo con `railway up` sin
+`service source connect`. Conectarlos es un paso aparte y de todos modos no
+sirve de nada mientras el Root Directory no esté fijado.
 
 Hasta que se haga eso, los despliegues se siguen haciendo a mano con
 `railway up <carpeta> --path-as-root --service <nombre> --detach --ci` (ver
@@ -142,20 +155,30 @@ railway domain --service projects            # genera <projects-domain>.up.railw
 # puerto imprime uvicorn y usar ese valor, no asumir uno fijo.
 railway domain update <projects-domain> --port <puerto-real> --service projects
 
-# 4. Frontend
+# 4. Servicio comercial (services/comercial, E2-H1) — mismo JWT_SECRET que auth
+railway add --service comercial
+railway variable set "DATABASE_URL=postgresql+psycopg://\${{Postgres.PGUSER}}:\${{Postgres.PGPASSWORD}}@\${{Postgres.PGHOST}}:\${{Postgres.PGPORT}}/\${{Postgres.PGDATABASE}}" --service comercial --skip-deploys
+railway variable set "JWT_SECRET=<el mismo valor usado en auth>" --service comercial --skip-deploys
+railway up services/comercial --path-as-root --service comercial --detach --ci
+railway domain --service comercial           # genera <comercial-domain>.up.railway.app
+railway domain update <comercial-domain> --port <puerto-real> --service comercial
+
+# 5. Frontend
 railway add --service frontend
 railway variable set "VITE_API_BASE_URL=https://<auth-domain>" --service frontend --skip-deploys
 railway variable set "VITE_PROJECTS_API_BASE_URL=https://<projects-domain>" --service frontend --skip-deploys
+railway variable set "VITE_COMERCIAL_API_BASE_URL=https://<comercial-domain>" --service frontend --skip-deploys
 railway up frontend --path-as-root --service frontend --detach --ci
 railway domain --service frontend            # genera <frontend-domain>.up.railway.app
 railway domain update <frontend-domain> --port 80 --service frontend
 
-# 5. Cerrar el círculo: los backends necesitan saber el dominio del frontend
+# 6. Cerrar el círculo: los backends necesitan saber el dominio del frontend
 railway variable set "APP_BASE_URL=https://<frontend-domain>" --service auth --skip-deploys
 railway variable set 'CORS_ORIGINS=["https://<frontend-domain>"]' --service auth   # dispara redeploy
 railway variable set 'CORS_ORIGINS=["https://<frontend-domain>"]' --service projects
+railway variable set 'CORS_ORIGINS=["https://<frontend-domain>"]' --service comercial
 
-# 6. Crear el usuario administrador y los proyectos de ejemplo
+# 7. Crear el usuario administrador y los datos de ejemplo
 railway variable list --service Postgres --json   # copiar DATABASE_PUBLIC_URL
 cd services/auth && source .venv/Scripts/activate
 DATABASE_URL="postgresql+psycopg://...<DATABASE_PUBLIC_URL con el driver +psycopg>..." \
@@ -163,6 +186,9 @@ SEED_ADMIN_EMAIL=maya@grupomactral.com SEED_ADMIN_PASSWORD='Mactral2026!' \
 python seed.py
 
 cd ../projects && source .venv/Scripts/activate
+DATABASE_URL="postgresql+psycopg://...<misma DATABASE_PUBLIC_URL>..." python seed.py
+
+cd ../comercial && source .venv/Scripts/activate
 DATABASE_URL="postgresql+psycopg://...<misma DATABASE_PUBLIC_URL>..." python seed.py
 ```
 
@@ -180,6 +206,11 @@ DATABASE_URL="postgresql+psycopg://...<misma DATABASE_PUBLIC_URL>..." python see
 - **Auto-deploy por GitHub falla en un monorepo** sin poder fijar "Root
   Directory" desde el CLI (ver sección de arriba) — hay que hacerlo una vez
   por servicio desde el dashboard.
+- **"Free plan resource provision limit exceeded"** al agregar el 5to
+  servicio (`comercial`): el plan gratuito de Railway limita cuántos
+  servicios/recursos se pueden crear. Se resolvió reintentando el mismo
+  `railway add --service ...` más tarde; si vuelve a pasar, revisar el plan
+  en el dashboard antes de gastar tiempo depurando el comando.
 - **`railway ssh --service auth python seed.py` se queda colgado** — no se
   investigó a fondo por qué; como alternativa, se corrió `seed.py`
   *localmente* apuntando a `DATABASE_PUBLIC_URL` del plugin de Postgres (la
