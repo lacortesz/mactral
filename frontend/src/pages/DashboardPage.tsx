@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../context/AuthContext";
-import { MODULE_LABELS, ROLE_LABELS } from "../domain";
+import { MODULE_LABELS, ROLE_LABELS, moduleRoute } from "../domain";
 
 export default function DashboardPage() {
   const { user, accessibleModules } = useAuth();
@@ -24,11 +24,7 @@ export default function DashboardPage() {
         <h2 className="card-title">Módulos</h2>
         <div className="module-grid">
           {accessibleModules.map((m) => (
-            <Link
-              key={m}
-              className="module-card"
-              to={m === "administracion" ? "/usuarios" : `/modulos/${m}`}
-            >
+            <Link key={m} className="module-card" to={moduleRoute(m)}>
               {MODULE_LABELS[m]}
             </Link>
           ))}

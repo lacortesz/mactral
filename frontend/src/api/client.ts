@@ -1,4 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const PROJECTS_API_BASE_URL =
+  import.meta.env.VITE_PROJECTS_API_BASE_URL ?? "http://localhost:8100";
 
 export class ApiError extends Error {
   status: number;
@@ -31,11 +33,11 @@ type FetchOptions = {
   token?: string | null;
 };
 
-export async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
+async function doFetch<T>(baseUrl: string, path: string, opts: FetchOptions): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${baseUrl}${path}`, {
     method: opts.method ?? "GET",
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -49,6 +51,15 @@ export async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promis
   }
 
   return data as T;
+}
+
+export function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
+  return doFetch<T>(API_BASE_URL, path, opts);
+}
+
+// E1-H3: el servicio de proyectos (services/projects) es una API separada.
+export function projectsApiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
+  return doFetch<T>(PROJECTS_API_BASE_URL, path, opts);
 }
 
 export function retryAfterSeconds(error: ApiError): number | null {

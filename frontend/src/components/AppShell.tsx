@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { MODULE_LABELS, type ModuleKey } from "../domain";
+import { MODULE_LABELS, moduleRoute, type ModuleKey } from "../domain";
 
 const NAV_ORDER: ModuleKey[] = [
   "comercial",
@@ -37,7 +37,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {NAV_ORDER.filter((m) => accessibleModules.includes(m)).map((m) => (
             <NavLink
               key={m}
-              to={m === "administracion" ? "/usuarios" : `/modulos/${m}`}
+              to={moduleRoute(m)}
               className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
             >
               {MODULE_LABELS[m]}
@@ -53,9 +53,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <div className="main-content">
         <div className="topbar">
-          <span style={{ color: "var(--mactral-text-muted)", fontSize: 13 }}>
+          <Link
+            to="/reg-maestro"
+            style={{ color: "var(--mactral-text-muted)", fontSize: 13, textDecoration: "none" }}
+          >
             » Buscar por código CRP o cliente...
-          </span>
+          </Link>
           <button className="btn-link" onClick={handleLogout}>
             Cerrar sesión
           </button>

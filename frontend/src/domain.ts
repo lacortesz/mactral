@@ -41,3 +41,24 @@ export const LINE_LABELS: Record<LineaNegocio, string> = {
   INDUSTRY: "Industry",
   AMBAS: "Ambas",
 };
+
+const DEDICATED_MODULE_ROUTES: Partial<Record<ModuleKey, string>> = {
+  administracion: "/usuarios",
+  "reg-maestro": "/reg-maestro",
+};
+
+export function moduleRoute(m: ModuleKey): string {
+  return DEDICATED_MODULE_ROUTES[m] ?? `/modulos/${m}`;
+}
+
+// E1-H3: catálogos de la ficha central del proyecto (CRP).
+export type EstadoEtapa = "PENDIENTE" | "EN_CURSO" | "CERRADO" | "BLOQUEADO";
+
+export const ESTADO_ETAPA_LABELS: Record<EstadoEtapa, string> = {
+  PENDIENTE: "Pendiente",
+  EN_CURSO: "En curso",
+  CERRADO: "Cerrado",
+  BLOQUEADO: "Bloqueado",
+};
+
+export type SemaforoColor = "VERDE" | "AMARILLO" | "ROJO";

@@ -10,6 +10,9 @@ Implementa:
 - **E1-H2 — Inicio de sesión seguro**: login con JWT, bloqueo tras 5 intentos
   fallidos (15 min), expiración de sesión por inactividad, recuperación de
   contraseña por correo, y control de acceso por módulo según rol.
+- **E1-H3 — Ficha central del proyecto (CRP)**: búsqueda de un proyecto por
+  código CRP o cliente, ficha de solo lectura con datos base, estado por
+  módulo (con candado en las etapas cerradas) y línea de tiempo.
 
 Ver `HU_AC_Mockups_GrupoMactral_Epica_1.pdf` para las historias de usuario
 originales.
@@ -17,34 +20,44 @@ originales.
 ## Estructura
 
 ```
-services/auth/   FastAPI + SQLAlchemy + Alembic (usuarios, roles, sesión)
-frontend/        React + Vite + TypeScript (SPA)
+services/auth/       FastAPI + SQLAlchemy + Alembic (usuarios, roles, sesión)
+services/projects/   FastAPI + SQLAlchemy + Alembic (ficha CRP, E1-H3)
+frontend/            React + Vite + TypeScript (SPA)
 docker-compose.yml
 ```
+
+`auth` y `projects` comparten la misma instancia de Postgres (bases lógicas
+separadas por prefijo de tabla, cada una con su propia tabla de versiones de
+Alembic) y el mismo `JWT_SECRET`: `projects` no emite sesiones, solo verifica
+el JWT que emitió `auth`.
 
 ## Puesta en marcha (Docker, recomendado)
 
 ```bash
-docker compose up -d --build postgres auth frontend
-docker compose run --rm seed   # crea el usuario Gerencia/Admin inicial
+docker compose up -d --build postgres auth projects frontend
+docker compose run --rm seed             # usuario Gerencia/Admin inicial
+docker compose run --rm seed-projects    # proyectos de ejemplo (GM26-03, GM26-04)
 ```
 
 - Frontend: http://localhost:8080
-- API: http://localhost:8000 (docs interactivas en `/docs`)
+- API auth: http://localhost:8000 (docs interactivas en `/docs`)
+- API projects: http://localhost:8100 (docs interactivas en `/docs`)
 - Usuario inicial: `maya@grupomactral.com` / `Mactral2026!` (configurable via
   `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`)
 
 ## Puesta en marcha (desarrollo local, sin Docker)
 
-Backend:
+Backend (repetir para `services/auth` y `services/projects`; ambos siguen el
+mismo patrón):
 ```bash
-cd services/auth
+cd services/auth   # o services/projects
 python -m venv .venv && source .venv/Scripts/activate  # o .venv/bin/activate en Linux/Mac
 pip install -r requirements-dev.txt
-cp .env.example .env   # ajustar DATABASE_URL a un Postgres local
+cp .env.example .env   # ajustar DATABASE_URL a un Postgres local; JWT_SECRET debe
+                        # ser igual en ambos servicios
 alembic upgrade head
 python seed.py
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload   # auth en :8000, projects usar --port 8100
 ```
 
 Frontend:
@@ -59,8 +72,13 @@ npm run dev   # http://localhost:5173
 
 **URLs actuales:**
 - Frontend: https://frontend-production-1622.up.railway.app
-- API: https://auth-production-b32d.up.railway.app (docs en `/docs`)
+- API auth: https://auth-production-b32d.up.railway.app (docs en `/docs`)
 - Usuario inicial: `maya@grupomactral.com` / `Mactral2026!`
+
+> `services/projects` (E1-H3) todavía no está desplegado en Railway — solo
+> corre localmente / vía Docker por ahora. Desplegarlo sigue el mismo patrón
+> que `auth` (ver comandos abajo, servicio nuevo + su propio dominio +
+> `VITE_PROJECTS_API_BASE_URL` en el frontend).
 
 Se desplegó con el [Railway CLI](https://docs.railway.com/guides/cli) (no vía
 `docker-compose.yml` directamente — Railway despliega cada servicio por
@@ -134,10 +152,11 @@ dashboard de vez en cuando.
 
 ## Pruebas
 
+Repetir en cada servicio (`services/auth`, `services/projects`):
 ```bash
-cd services/auth
+cd services/auth   # o services/projects
 source .venv/Scripts/activate
-pytest --cov --cov-report=term-missing   # umbral 90%, 96% actual
+pytest --cov --cov-report=term-missing   # umbral 90%; auth 96%, projects 100%
 ```
 
 ## Qué cubre cada historia
@@ -167,6 +186,30 @@ pytest --cov --cov-report=term-missing   # umbral 90%, 96% actual
 Los módulos Comercial/Importaciones/Técnico/Stock/Financiero/Reg. maestro son
 endpoints *stub* (`app/routers/modules.py`): existen solo para poder ejercer
 el control de acceso de E1-H2; su contenido real pertenece a otras épicas.
+
+### E1-H3
+- Búsqueda por código CRP o nombre de cliente (`/projects/search?q=...`,
+  `services/projects/app/services/project_service.py`); sin coincidencias
+  se muestra "No se encontraron proyectos con ese criterio".
+- Ficha completa (código CRP, tipo, cliente, ciudad, producto, marca, etapa
+  actual y semáforo) igual para todos los roles — accesible desde el módulo
+  "Reg. maestro" (`frontend/src/pages/RegMaestroPage.tsx`), que todos los
+  roles tienen habilitado.
+- Estado por módulo (Comercial/Reg. maestro/Importaciones/Técnico) con ícono
+  de candado 🔒 cuando la etapa está `CERRADO`; línea de tiempo con los
+  eventos del proyecto ordenados por fecha.
+- `editable_por_mi_rol` por módulo ya viene calculado en la respuesta de la
+  API (según qué módulos puede editar cada rol), como base para las historias
+  futuras que agreguen los formularios de edición por módulo — E1-H3 en sí es
+  de solo lectura.
+
+**Nota técnica:** el enum `Modulo` tiene nombres en mayúsculas
+(`COMERCIAL`) pero valores en minúscula-con-guion (`"comercial"`, para que
+coincidan con las claves de módulo del frontend). Por defecto SQLAlchemy
+manda el *nombre* del enum de Python a Postgres, no el valor — hay que pasar
+`values_callable` explícitamente en la columna (`app/models.py`) o falla con
+`invalid input value for enum` en Postgres (no se detecta en SQLite porque
+ahí no hay una restricción real, así que los tests unitarios no lo atrapan).
 
 ## Notas de la migración de stack
 

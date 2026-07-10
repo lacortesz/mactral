@@ -5,6 +5,7 @@ import DashboardPage from "./pages/DashboardPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
+import RegMaestroPage from "./pages/RegMaestroPage";
 import SetPasswordPage from "./pages/SetPasswordPage";
 import UsuariosPage from "./pages/UsuariosPage";
 
@@ -34,6 +35,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <UsuariosPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reg-maestro"
+        element={
+          <ProtectedRoute>
+            <RegMaestroPage />
           </ProtectedRoute>
         }
       />
