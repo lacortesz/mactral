@@ -55,6 +55,83 @@ cp .env.example .env
 npm run dev   # http://localhost:5173
 ```
 
+## Despliegue en producción (Railway)
+
+**URLs actuales:**
+- Frontend: https://frontend-production-1622.up.railway.app
+- API: https://auth-production-b32d.up.railway.app (docs en `/docs`)
+- Usuario inicial: `maya@grupomactral.com` / `Mactral2026!`
+
+Se desplegó con el [Railway CLI](https://docs.railway.com/guides/cli) (no vía
+`docker-compose.yml` directamente — Railway despliega cada servicio por
+separado a partir de su Dockerfile). Proyecto: `mactral`, 3 servicios:
+`Postgres` (plugin gestionado), `auth` y `frontend`.
+
+### Reproducir el despliegue desde cero
+
+```bash
+npm install -g @railway/cli
+railway login                       # abre el navegador para autenticar
+
+cd /ruta/al/repo
+railway init --name mactral
+
+# 1. Base de datos gestionada
+railway add --database postgres
+
+# 2. Backend (services/auth)
+railway add --service auth
+railway variable set "DATABASE_URL=postgresql+psycopg://\${{Postgres.PGUSER}}:\${{Postgres.PGPASSWORD}}@\${{Postgres.PGHOST}}:\${{Postgres.PGPORT}}/\${{Postgres.PGDATABASE}}" --service auth --skip-deploys
+railway variable set "JWT_SECRET=$(openssl rand -hex 32)" --service auth --skip-deploys
+railway variable set "SEED_ADMIN_EMAIL=maya@grupomactral.com" --service auth --skip-deploys
+railway variable set "SEED_ADMIN_PASSWORD=Mactral2026!" --service auth --skip-deploys
+railway up services/auth --path-as-root --service auth --detach --ci
+railway domain --service auth                # genera <auth-domain>.up.railway.app
+railway domain update <auth-domain> --port 8000 --service auth   # ver nota de puertos abajo
+
+# 3. Frontend
+railway add --service frontend
+railway variable set "VITE_API_BASE_URL=https://<auth-domain>" --service frontend --skip-deploys
+railway up frontend --path-as-root --service frontend --detach --ci
+railway domain --service frontend            # genera <frontend-domain>.up.railway.app
+railway domain update <frontend-domain> --port 80 --service frontend
+
+# 4. Cerrar el círculo: el backend necesita saber el dominio del frontend
+railway variable set "APP_BASE_URL=https://<frontend-domain>" --service auth --skip-deploys
+railway variable set 'CORS_ORIGINS=["https://<frontend-domain>"]' --service auth   # dispara redeploy
+
+# 5. Crear el usuario administrador inicial
+railway variable list --service Postgres --json   # copiar DATABASE_PUBLIC_URL
+cd services/auth && source .venv/Scripts/activate
+DATABASE_URL="postgresql+psycopg://...<DATABASE_PUBLIC_URL con el driver +psycopg>..." \
+SEED_ADMIN_EMAIL=maya@grupomactral.com SEED_ADMIN_PASSWORD='Mactral2026!' \
+python seed.py
+```
+
+### Gotchas encontrados
+
+- **502 "Application failed to respond"** en ambos servicios justo después del
+  primer deploy: Railway no sabía a qué puerto interno enrutar el tráfico
+  público. Se resolvió con `railway domain update <dominio> --port <puerto>`
+  (8000 para `auth`, 80 para `frontend`/nginx). Si vuelve a pasar, revisar el
+  puerto configurado en el dominio del servicio.
+- **`railway ssh --service auth python seed.py` se queda colgado** — no se
+  investigó a fondo por qué; como alternativa, se corrió `seed.py`
+  *localmente* apuntando a `DATABASE_PUBLIC_URL` del plugin de Postgres (la
+  URL con el proxy TCP público de Railway, reemplazando el esquema por
+  `postgresql+psycopg://` para que SQLAlchemy la acepte). Esa URL es
+  alcanzable desde cualquier máquina, no solo desde dentro de Railway.
+- El correo de recuperación de contraseña sigue siendo un stub (ver sección
+  E1-H2 más abajo): revisar `railway logs --service auth` para ver el enlace
+  generado en vez de esperar un correo real.
+
+### Costos
+
+Plan Hobby de Railway: $5/mes de crédito incluido, luego pago por uso
+(CPU/RAM/red). La carga de este proyecto es mínima, así que debería caber
+holgadamente en el crédito gratuito, pero conviene revisar el consumo en el
+dashboard de vez en cuando.
+
 ## Pruebas
 
 ```bash
