@@ -1,6 +1,8 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 const PROJECTS_API_BASE_URL =
   import.meta.env.VITE_PROJECTS_API_BASE_URL ?? "http://localhost:8100";
+const COMERCIAL_API_BASE_URL =
+  import.meta.env.VITE_COMERCIAL_API_BASE_URL ?? "http://localhost:8200";
 
 export class ApiError extends Error {
   status: number;
@@ -60,6 +62,11 @@ export function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
 // E1-H3: el servicio de proyectos (services/projects) es una API separada.
 export function projectsApiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
   return doFetch<T>(PROJECTS_API_BASE_URL, path, opts);
+}
+
+// E2-H1: el servicio comercial (services/comercial) es una API separada.
+export function comercialApiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
+  return doFetch<T>(COMERCIAL_API_BASE_URL, path, opts);
 }
 
 export function retryAfterSeconds(error: ApiError): number | null {

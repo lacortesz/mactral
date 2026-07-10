@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAuth } from "./context/AuthContext";
+import ComercialPage from "./pages/ComercialPage";
 import DashboardPage from "./pages/DashboardPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import LoginPage from "./pages/LoginPage";
@@ -35,6 +36,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <UsuariosPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/comercial"
+        element={
+          <ProtectedRoute>
+            <ComercialPage />
           </ProtectedRoute>
         }
       />

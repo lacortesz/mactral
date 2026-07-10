@@ -64,17 +64,40 @@ services:
       postgres:
         condition: service_healthy
 
+  comercial:
+    build: ./services/comercial
+    environment:
+      DATABASE_URL: postgresql+psycopg://mactral:mactral@postgres:5432/mactral
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-cambia-esto-en-produccion}
+      CORS_ORIGINS: '["http://localhost:5173","http://localhost:8080"]'
+    ports:
+      - "8200:8200"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  seed-comercial:
+    build: ./services/comercial
+    environment:
+      DATABASE_URL: postgresql+psycopg://mactral:mactral@postgres:5432/mactral
+    command: ["sh", "-c", "alembic upgrade head && python seed.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
         VITE_PROJECTS_API_BASE_URL: ${VITE_PROJECTS_API_BASE_URL:-http://localhost:8100}
+        VITE_COMERCIAL_API_BASE_URL: ${VITE_COMERCIAL_API_BASE_URL:-http://localhost:8200}
     ports:
       - "8080:80"
     depends_on:
       - auth
       - projects
+      - comercial
 
 volumes:
   mactral_pgdata:

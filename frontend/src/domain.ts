@@ -45,6 +45,7 @@ export const LINE_LABELS: Record<LineaNegocio, string> = {
 const DEDICATED_MODULE_ROUTES: Partial<Record<ModuleKey, string>> = {
   administracion: "/usuarios",
   "reg-maestro": "/reg-maestro",
+  comercial: "/comercial",
 };
 
 export function moduleRoute(m: ModuleKey): string {
@@ -62,3 +63,20 @@ export const ESTADO_ETAPA_LABELS: Record<EstadoEtapa, string> = {
 };
 
 export type SemaforoColor = "VERDE" | "AMARILLO" | "ROJO";
+
+// E2-H1: catálogos del módulo Comercial (leads).
+export type EstadoLead = "COTIZAR" | "ENVIADA" | "VENDIDO";
+
+export const ESTADO_LEAD_LABELS: Record<EstadoLead, string> = {
+  COTIZAR: "Cotizar",
+  ENVIADA: "Enviada",
+  VENDIDO: "Vendido",
+};
+
+export const CANAL_ENTRADA_OPTIONS = [
+  "Sitio web",
+  "Referido",
+  "Feria comercial",
+  "Redes sociales",
+  "Llamada entrante",
+] as const;

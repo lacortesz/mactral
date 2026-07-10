@@ -13,51 +13,57 @@ Implementa:
 - **E1-H3 — Ficha central del proyecto (CRP)**: búsqueda de un proyecto por
   código CRP o cliente, ficha de solo lectura con datos base, estado por
   módulo (con candado en las etapas cerradas) y línea de tiempo.
+- **E2-H1 — Registro de lead**: alta de leads con datos de contacto y equipo
+  solicitado, consecutivo automático por línea de negocio (MOB/IND), y
+  registro de interacciones posteriores.
 
-Ver `HU_AC_Mockups_GrupoMactral_Epica_1.pdf` para las historias de usuario
-originales.
+Ver `HU_AC_Mockups_GrupoMactral_v1_optimizado.pdf` (32 historias, 11 épicas)
+para las historias de usuario originales.
 
 ## Estructura
 
 ```
-services/auth/       FastAPI + SQLAlchemy + Alembic (usuarios, roles, sesión)
-services/projects/   FastAPI + SQLAlchemy + Alembic (ficha CRP, E1-H3)
-frontend/            React + Vite + TypeScript (SPA)
+services/auth/        FastAPI + SQLAlchemy + Alembic (usuarios, roles, sesión)
+services/projects/    FastAPI + SQLAlchemy + Alembic (ficha CRP, E1-H3)
+services/comercial/   FastAPI + SQLAlchemy + Alembic (leads, E2-H1)
+frontend/             React + Vite + TypeScript (SPA)
 docker-compose.yml
 ```
 
-`auth` y `projects` comparten la misma instancia de Postgres (bases lógicas
-separadas por prefijo de tabla, cada una con su propia tabla de versiones de
-Alembic) y el mismo `JWT_SECRET`: `projects` no emite sesiones, solo verifica
-el JWT que emitió `auth`.
+`auth`, `projects` y `comercial` comparten la misma instancia de Postgres
+(bases lógicas separadas por prefijo de tabla, cada una con su propia tabla
+de versiones de Alembic) y el mismo `JWT_SECRET`: `projects` y `comercial`
+no emiten sesiones, solo verifican el JWT que emitió `auth`.
 
 ## Puesta en marcha (Docker, recomendado)
 
 ```bash
-docker compose up -d --build postgres auth projects frontend
-docker compose run --rm seed             # usuario Gerencia/Admin inicial
-docker compose run --rm seed-projects    # proyectos de ejemplo (GM26-03, GM26-04)
+docker compose up -d --build postgres auth projects comercial frontend
+docker compose run --rm seed              # usuario Gerencia/Admin inicial
+docker compose run --rm seed-projects     # proyectos de ejemplo (GM26-03, GM26-04)
+docker compose run --rm seed-comercial    # leads de ejemplo (MOB26-01x, IND26-00x)
 ```
 
 - Frontend: http://localhost:8080
 - API auth: http://localhost:8000 (docs interactivas en `/docs`)
 - API projects: http://localhost:8100 (docs interactivas en `/docs`)
+- API comercial: http://localhost:8200 (docs interactivas en `/docs`)
 - Usuario inicial: `maya@grupomactral.com` / `Mactral2026!` (configurable via
   `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`)
 
 ## Puesta en marcha (desarrollo local, sin Docker)
 
-Backend (repetir para `services/auth` y `services/projects`; ambos siguen el
-mismo patrón):
+Backend (repetir para `services/auth`, `services/projects` y
+`services/comercial`; los tres siguen el mismo patrón):
 ```bash
-cd services/auth   # o services/projects
+cd services/auth   # o services/projects, o services/comercial
 python -m venv .venv && source .venv/Scripts/activate  # o .venv/bin/activate en Linux/Mac
 pip install -r requirements-dev.txt
 cp .env.example .env   # ajustar DATABASE_URL a un Postgres local; JWT_SECRET debe
-                        # ser igual en ambos servicios
+                        # ser igual en los tres servicios
 alembic upgrade head
 python seed.py
-uvicorn app.main:app --reload   # auth en :8000, projects usar --port 8100
+uvicorn app.main:app --reload   # auth :8000, projects :8100, comercial :8200
 ```
 
 Frontend:
@@ -193,11 +199,13 @@ dashboard de vez en cuando.
 
 ## Pruebas
 
-Repetir en cada servicio (`services/auth`, `services/projects`):
+Repetir en cada servicio (`services/auth`, `services/projects`,
+`services/comercial`):
 ```bash
-cd services/auth   # o services/projects
+cd services/auth   # o services/projects, o services/comercial
 source .venv/Scripts/activate
-pytest --cov --cov-report=term-missing   # umbral 90%; auth 96%, projects 100%
+pytest --cov --cov-report=term-missing
+# umbral 90%; auth 96%, projects 100%, comercial 97%
 ```
 
 ## Qué cubre cada historia
@@ -251,6 +259,23 @@ manda el *nombre* del enum de Python a Postgres, no el valor — hay que pasar
 `values_callable` explícitamente en la columna (`app/models.py`) o falla con
 `invalid input value for enum` en Postgres (no se detecta en SQLite porque
 ahí no hay una restricción real, así que los tests unitarios no lo atrapan).
+
+### E2-H1
+- Alta exitosa (`POST /leads`, `services/comercial/app/services/lead_service.py`)
+  → lead con estado `COTIZAR` y consecutivo automático `MOB26-XXX` /
+  `IND26-XXX` según línea de negocio, con contador por (línea, año) protegido
+  con `SELECT ... FOR UPDATE` para altas concurrentes.
+- Campos obligatorios incompletos (nombre, y al menos teléfono o correo) →
+  422 con el mensaje exacto "Completa los campos requeridos"
+  (`app/schemas.py`), sin crear el registro.
+- Registro de interacción posterior (`POST /leads/{id}/interactions`) → queda
+  en el historial del lead con fecha, canal, resumen y usuario.
+- Solo el vendedor asignado (por `vendedor_id`, tomado del JWT al crear el
+  lead) o Gerencia pueden agregar interacciones; solo roles Comercial o
+  Gerencia pueden crear leads (`can_manage_leads` en `app/domain.py`).
+- Frontend: página dedicada del módulo Comercial
+  (`frontend/src/pages/ComercialPage.tsx`) con KPIs por estado, listado,
+  formulario de alta y panel de interacciones por lead.
 
 ## Notas de la migración de stack
 
