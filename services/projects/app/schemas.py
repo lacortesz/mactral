@@ -229,6 +229,20 @@ class TableroFinancieroOut(BaseModel):
     anticipo1_solicitud_confirmada: bool
 
 
+class NotificacionOut(BaseModel):
+    """E9-H2: bandeja de notificaciones — asignación e inactividad."""
+
+    id: str
+    crp_code: str
+    modulo: Modulo
+    tipo: str
+    mensaje: str
+    fecha: datetime
+    leida: bool
+
+    model_config = {"from_attributes": True}
+
+
 class CuentaPorPagarCreate(BaseModel):
     """E8-H1: registro de un gasto logístico (vuelo/hospedaje/transporte/
     viáticos/otro), que a la vez es la cuenta por pagar consolidada de

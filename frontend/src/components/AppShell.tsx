@@ -60,9 +60,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
           >
             » Buscar por código CRP o cliente...
           </Link>
-          <button className="btn-link" onClick={handleLogout}>
-            Cerrar sesión
-          </button>
+          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+            <Link to="/notificaciones" className="btn-link">
+              Notificaciones
+            </Link>
+            <button className="btn-link" onClick={handleLogout}>
+              Cerrar sesión
+            </button>
+          </div>
         </div>
         <div className="content">{children}</div>
       </div>

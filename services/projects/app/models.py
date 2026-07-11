@@ -127,6 +127,26 @@ class ProjectEvent(Base):
     project: Mapped["Project"] = relationship(back_populates="events")
 
 
+class Notificacion(Base):
+    """E9-H2: bandeja de notificaciones por módulo — asignación de un
+    proyecto a un módulo, y alerta de inactividad (5 días sin eventos
+    nuevos mientras el módulo sigue En curso)."""
+
+    __tablename__ = "notificaciones"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    modulo: Mapped[Modulo] = mapped_column(
+        SAEnum(Modulo, name="modulo_notificacion", values_callable=_values), nullable=False
+    )
+    tipo: Mapped[str] = mapped_column(String(32), nullable=False)
+    mensaje: Mapped[str] = mapped_column(Text(), nullable=False)
+    fecha: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+    leida: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    project: Mapped["Project"] = relationship()
+
+
 class ImportChecklistItem(Base):
     """E4-H1: checklist documental de importación (solo proyectos GM)."""
 

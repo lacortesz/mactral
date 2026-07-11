@@ -9,6 +9,7 @@ import ImportacionesPage from "./pages/ImportacionesPage";
 import LoginPage from "./pages/LoginPage";
 import LogisticaPage from "./pages/LogisticaPage";
 import ModulePage from "./pages/ModulePage";
+import NotificacionesPage from "./pages/NotificacionesPage";
 import RegMaestroPage from "./pages/RegMaestroPage";
 import SetPasswordPage from "./pages/SetPasswordPage";
 import StockPage from "./pages/StockPage";
@@ -97,6 +98,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <LogisticaPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notificaciones"
+        element={
+          <ProtectedRoute>
+            <NotificacionesPage />
           </ProtectedRoute>
         }
       />

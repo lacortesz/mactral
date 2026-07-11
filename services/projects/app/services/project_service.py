@@ -96,8 +96,12 @@ def create_project(db: Session, data: ProjectCreate) -> Project:
     db.add(project)
     db.flush()
 
+    from app.services import notificacion_service
+
     for m in data.modulos:
         db.add(ProjectModuleStatus(project_id=project.id, modulo=m.modulo, estado=m.estado))
+        if m.estado == EstadoEtapa.EN_CURSO:
+            notificacion_service.notificar_asignacion(db, project, m.modulo)
 
     # E4-H1 restricción: el checklist documental solo aplica a proyectos GM;
     # los STMB/STIN van directo a Técnico y nunca pasan por Importaciones.
@@ -366,11 +370,14 @@ def enviar_a_tecnico(
             )
         )
 
+    from app.services import notificacion_service
+
     for m in project.module_statuses:
         if m.modulo == Modulo.IMPORTACIONES:
             m.estado = EstadoEtapa.CERRADO
         elif m.modulo == Modulo.TECNICO:
             m.estado = EstadoEtapa.EN_CURSO
+            notificacion_service.notificar_asignacion(db, project, Modulo.TECNICO)
 
     db.commit()
     db.refresh(project)

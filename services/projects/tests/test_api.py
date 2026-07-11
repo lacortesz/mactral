@@ -831,3 +831,27 @@ def test_descargar_soporte_inexistente_devuelve_404(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 404
+
+
+def test_notificaciones_via_api(client):
+    token = _token("COMERCIAL")
+    token_importaciones = _token("IMPORTACIONES")
+    client.post("/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"})
+
+    response = client.get("/notificaciones", headers={"Authorization": f"Bearer {token_importaciones}"})
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) >= 1
+
+    notif_id = body[0]["id"]
+    marcada = client.patch(
+        f"/notificaciones/{notif_id}/leer", headers={"Authorization": f"Bearer {token_importaciones}"}
+    )
+    assert marcada.status_code == 200
+    assert marcada.json()["leida"] is True
+
+
+def test_marcar_notificacion_inexistente_devuelve_404_via_api(client):
+    token = _token("IMPORTACIONES")
+    response = client.patch("/notificaciones/no-existe/leer", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 404
