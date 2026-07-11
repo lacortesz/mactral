@@ -1,10 +1,11 @@
-"""E5-H1/E5-H2: programación de instalación y acta de entrega (módulo Técnico)."""
-from datetime import datetime
+"""E5-H1/E5-H2/E5-H3: instalación, acta de entrega y semáforo de cumplimiento
+(módulo Técnico)."""
+from datetime import date, datetime
 from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from app.domain import EstadoEtapa, EstadoInstalacion, Modulo, Rol, can_manage_installation
+from app.domain import EstadoEtapa, EstadoInstalacion, Modulo, Rol, SemaforoColor, can_manage_installation
 from app.models import Installation, InstallationReprogramming, Project, ProjectEvent
 from app.schemas import ActaEntregaCreate, InstallationCreate, InstallationReprogram
 from app.services.project_service import ForbiddenError, get_project_by_code
@@ -124,6 +125,12 @@ def registrar_acta(
         if m.modulo == Modulo.TECNICO:
             m.estado = EstadoEtapa.CERRADO
 
+    # E5-H3: al cerrar la entrega, el semáforo del proyecto queda con el
+    # resultado final (comparación fecha proyectada vs. real).
+    color, detalle = calcular_semaforo(installation)
+    project.semaforo_color = color
+    project.semaforo_detalle = detalle
+
     now = datetime.utcnow()
     db.add(
         ProjectEvent(
@@ -145,6 +152,26 @@ def registrar_acta(
     db.commit()
     db.refresh(installation)
     return installation
+
+
+def calcular_semaforo(installation: Installation) -> tuple[SemaforoColor, str]:
+    """E5-H3: compara la fecha proyectada con la real (o con hoy, si sigue
+    Programada) para determinar el semáforo de cumplimiento de entrega."""
+    if installation.estado == EstadoInstalacion.COMPLETADO and installation.fecha_real_entrega is not None:
+        diff = (installation.fecha_real_entrega - installation.fecha_instalacion).days
+        if diff < 0:
+            return SemaforoColor.VERDE, f"Entrega anticipada — {-diff} día(s) antes"
+        if diff == 0:
+            return SemaforoColor.AMARILLO, "Entrega a tiempo"
+        return SemaforoColor.ROJO, f"Entrega tardía — {diff} día(s) de retraso"
+
+    # Escenario 4: la fecha programada ya pasó y la instalación sigue en
+    # estado Programado — el semáforo cambia a Rojo automáticamente.
+    if date.today() > installation.fecha_instalacion:
+        dias = (date.today() - installation.fecha_instalacion).days
+        return SemaforoColor.ROJO, f"Instalación programada vencida hace {dias} día(s) sin cierre"
+
+    return SemaforoColor.VERDE, "Instalación programada — en fecha"
 
 
 def get_acta_attachment(db: Session, crp_code: str) -> Installation:

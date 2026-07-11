@@ -8,6 +8,7 @@ from app.domain import (
     CHECKLIST_ITEMS,
     NUMERO_ITEM_BL,
     EstadoEtapa,
+    EstadoInstalacion,
     EstadoItemChecklist,
     Modulo,
     Rol,
@@ -143,6 +144,30 @@ def get_project_detail(db: Session, crp_code: str, actor_role: Rol) -> ProjectDe
 
     if project is None:
         raise ProjectNotFoundError("No se encontraron proyectos con ese criterio")
+
+    # E5-H3 escenario 4: si la instalación sigue Programada y la fecha ya
+    # venció, el semáforo pasa a Rojo automáticamente (evaluado en cada
+    # lectura de la ficha, ya que no hay un job diario corriendo aparte).
+    # Import local para evitar un ciclo de imports entre ambos servicios.
+    from app.services.installation_service import calcular_semaforo
+
+    if project.instalacion is not None and project.instalacion.estado == EstadoInstalacion.PROGRAMADO:
+        color, detalle = calcular_semaforo(project.instalacion)
+        if color != project.semaforo_color or detalle != project.semaforo_detalle:
+            alerta_nueva = color == SemaforoColor.ROJO and project.semaforo_color != SemaforoColor.ROJO
+            project.semaforo_color = color
+            project.semaforo_detalle = detalle
+            if alerta_nueva:
+                db.add(
+                    ProjectEvent(
+                        project_id=project.id,
+                        fecha=datetime.utcnow(),
+                        origen="Sistema",
+                        mensaje=f"Alerta: {detalle}",
+                    )
+                )
+            db.commit()
+            db.refresh(project)
 
     allowed = editable_modules(actor_role)
 
