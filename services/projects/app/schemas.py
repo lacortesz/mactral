@@ -225,6 +225,8 @@ class TableroFinancieroOut(BaseModel):
     semaforo_pago: SemaforoColor
     cuotas: list[CuotaOut]
     tasas_cambio: list[TasaCambioOut]
+    planos_aprobados_fecha: datetime | None
+    anticipo1_solicitud_confirmada: bool
 
 
 class CuentaPorPagarOut(BaseModel):

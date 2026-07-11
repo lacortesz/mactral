@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.domain import (
     CHECKLIST_ITEMS,
     NUMERO_ITEM_BL,
+    NUMEROS_ITEM_PLANOS,
     EstadoEtapa,
     EstadoInstalacion,
     EstadoItemChecklist,
@@ -272,6 +273,29 @@ def update_checklist_item(
             )
         )
         project.notificado_anticipo2 = True
+
+    # E7-H5: cuando los dos ítems de plano quedan archivados se consideran
+    # "planos aprobados" y se dispara automáticamente la solicitud de
+    # Anticipo 1 (una sola vez por proyecto). La confirmación de que el
+    # Administrador ya envió esa solicitud queda como un paso aparte —
+    # ver financiero_service.confirmar_solicitud_anticipo1.
+    if (
+        numero in NUMEROS_ITEM_PLANOS
+        and data.estado == EstadoItemChecklist.ARCHIVADO
+        and project.planos_aprobados_fecha is None
+    ):
+        estados_planos = {i.numero: i.estado for i in project.checklist_items}
+        if all(estados_planos.get(n) == EstadoItemChecklist.ARCHIVADO for n in NUMEROS_ITEM_PLANOS):
+            now = datetime.utcnow()
+            project.planos_aprobados_fecha = now
+            db.add(
+                ProjectEvent(
+                    project_id=project.id,
+                    fecha=now,
+                    origen="Sistema",
+                    mensaje=f"Proyecto {project.crp_code} — Planos aprobados. Solicitar Anticipo 1",
+                )
+            )
 
     db.commit()
     db.refresh(item)

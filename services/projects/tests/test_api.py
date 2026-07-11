@@ -666,3 +666,39 @@ def test_cuentas_por_pagar_consolidado_otro_rol_devuelve_403(client):
     token = _token("COMERCIAL")
     response = client.get("/cuentas-por-pagar", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
+
+
+def test_confirmar_solicitud_anticipo1_via_api(client):
+    token = _token("IMPORTACIONES")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    crp = created["crp_code"]
+
+    for numero in ("1", "2"):
+        client.patch(
+            f"/projects/{crp}/checklist/{numero}",
+            data={"estado": "ARCHIVADO"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    response = client.post(
+        f"/projects/{crp}/anticipo1/confirmar-solicitud", headers={"Authorization": f"Bearer {token_admin}"}
+    )
+    assert response.status_code == 200
+    assert response.json()["anticipo1_solicitud_confirmada"] is True
+
+
+def test_confirmar_solicitud_anticipo1_sin_planos_aprobados_devuelve_422(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/anticipo1/confirmar-solicitud",
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 422

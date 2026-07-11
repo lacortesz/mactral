@@ -22,6 +22,7 @@ app.include_router(projects.router)
 app.include_router(financiero.router)
 app.include_router(financiero.tablero_router)
 app.include_router(financiero.cxp_router)
+app.include_router(financiero.anticipo1_router)
 
 
 @app.get("/health")
