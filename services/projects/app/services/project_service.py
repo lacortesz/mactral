@@ -9,8 +9,10 @@ from app.domain import (
     NUMERO_ITEM_BL,
     EstadoEtapa,
     EstadoItemChecklist,
+    Modulo,
     Rol,
     SemaforoColor,
+    TipoItemChecklist,
     can_edit_checklist,
     editable_modules,
 )
@@ -36,6 +38,17 @@ class ForbiddenError(Exception):
 
 
 class ChecklistItemNotFoundError(Exception):
+    pass
+
+
+class TransitionBlockedError(Exception):
+    def __init__(self, items_pendientes: list[str]):
+        self.items_pendientes = items_pendientes
+        nombres = ", ".join(items_pendientes)
+        super().__init__(f"Checklist incompleto. Ítems requeridos pendientes: {nombres}")
+
+
+class NoChecklistError(Exception):
     pass
 
 
@@ -242,3 +255,70 @@ def update_checklist_item(
 def get_checklist_attachment(db: Session, crp_code: str, numero: str) -> ImportChecklistItem:
     project = _get_project_by_code(db, crp_code)
     return _get_checklist_item(project, numero)
+
+
+def _items_requeridos_pendientes(project: Project) -> list[str]:
+    return [
+        item.nombre
+        for item in project.checklist_items
+        if item.tipo == TipoItemChecklist.REQUERIDO and item.estado == EstadoItemChecklist.PENDIENTE
+    ]
+
+
+def enviar_a_tecnico(
+    db: Session, actor_role: Rol, crp_code: str, ingreso_bodega_nota: str | None = None
+) -> Project:
+    """E4-H3: habilita el paso de Importaciones (CRPL) a Técnico. Restricción:
+    solo aplica a proyectos GM (los STMB/STIN ya nacen con Técnico en curso,
+    sin pasar por este checklist)."""
+    if not can_edit_checklist(actor_role):
+        raise ForbiddenError("Solo el rol Importaciones (o Gerencia) puede enviar el proyecto a Técnico.")
+
+    project = _get_project_by_code(db, crp_code)
+    if not project.checklist_items:
+        raise NoChecklistError("Este proyecto no tiene checklist de importación (no es un proyecto GM).")
+
+    pendientes = _items_requeridos_pendientes(project)
+    nota = (ingreso_bodega_nota or "").strip()
+
+    if pendientes and not nota:
+        # Escenario 3: ni el checklist está completo ni hay ingreso a bodega
+        # confirmado con justificación — la transición queda bloqueada.
+        raise TransitionBlockedError(pendientes)
+
+    now = datetime.utcnow()
+    if pendientes:
+        # Escenario 2: excepción de ingreso a bodega con checklist incompleto.
+        project.ingreso_bodega_fecha = now
+        project.ingreso_bodega_nota = nota
+        db.add(
+            ProjectEvent(
+                project_id=project.id,
+                fecha=now,
+                origen="Importaciones",
+                mensaje=(
+                    "Ingreso a bodega confirmado con checklist incompleto "
+                    f"({', '.join(pendientes)}) · Motivo: {nota}"
+                ),
+            )
+        )
+    else:
+        # Escenario 1: checklist completo (todo Archivado o No Aplica).
+        db.add(
+            ProjectEvent(
+                project_id=project.id,
+                fecha=now,
+                origen="Sistema",
+                mensaje="Checklist de importación completo → módulo Técnico",
+            )
+        )
+
+    for m in project.module_statuses:
+        if m.modulo == Modulo.IMPORTACIONES:
+            m.estado = EstadoEtapa.CERRADO
+        elif m.modulo == Modulo.TECNICO:
+            m.estado = EstadoEtapa.EN_CURSO
+
+    db.commit()
+    db.refresh(project)
+    return project

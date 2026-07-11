@@ -91,6 +91,12 @@ class ChecklistItemUpdate(BaseModel):
         return self
 
 
+class EnviarTecnicoIn(BaseModel):
+    # E4-H3 escenario 2: si el checklist queda incompleto, esta nota es la
+    # justificación obligatoria del ingreso a bodega excepcional.
+    ingreso_bodega_nota: str | None = None
+
+
 class ProjectDetailOut(BaseModel):
     id: str
     crp_code: str

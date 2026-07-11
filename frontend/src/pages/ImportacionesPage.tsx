@@ -31,11 +31,17 @@ type ChecklistItem = {
   tiene_adjunto: boolean;
 };
 
+type ModuleStatus = {
+  modulo: string;
+  estado: "PENDIENTE" | "EN_CURSO" | "CERRADO" | "BLOQUEADO";
+};
+
 type ProjectDetail = {
   crp_code: string;
   cliente: string;
   ciudad: string;
   checklist: ChecklistItem[];
+  modulos: ModuleStatus[];
 };
 
 type ItemFormState = { estado: EstadoItemChecklist; nota: string };
@@ -58,6 +64,9 @@ export default function ImportacionesPage() {
   const [itemFiles, setItemFiles] = useState<Record<string, File | null>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
+  const [ingresoBodegaNota, setIngresoBodegaNota] = useState("");
+  const [transicionError, setTransicionError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   async function handleSearch(event: FormEvent) {
     event.preventDefault();
@@ -118,6 +127,25 @@ export default function ImportacionesPage() {
       }));
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function handleEnviarTecnico(nota?: string) {
+    if (!selected) return;
+    setEnviando(true);
+    setTransicionError(null);
+    try {
+      await projectsApiFetch(`/projects/${encodeURIComponent(selected.crp_code)}/enviar-tecnico`, {
+        method: "POST",
+        token,
+        body: nota ? { ingreso_bodega_nota: nota } : {},
+      });
+      await openProject(selected.crp_code);
+      setIngresoBodegaNota("");
+    } catch (err) {
+      setTransicionError(err instanceof ApiError ? err.message : "No se pudo enviar el proyecto a Técnico");
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -314,6 +342,54 @@ export default function ImportacionesPage() {
                   })}
                 </tbody>
               </table>
+
+              {(() => {
+                const importaciones = selected.modulos.find((m) => m.modulo === "importaciones");
+                if (importaciones?.estado === "CERRADO") {
+                  return (
+                    <div className="alert alert-success" style={{ marginTop: 16 }}>
+                      ✓ Checklist cerrado — el proyecto ya avanzó al módulo Técnico.
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ marginTop: 16 }}>
+                    {transicionError && <div className="alert alert-error">{transicionError}</div>}
+                    {requeridosPendientes.length === 0 ? (
+                      <button className="btn-primary" disabled={enviando} onClick={() => handleEnviarTecnico()}>
+                        {enviando ? "Enviando..." : "Enviar a módulo Técnico"}
+                      </button>
+                    ) : (
+                      <div className="form-field">
+                        <label htmlFor="ingreso_bodega_nota">
+                          Excepción — ingreso a bodega (nota de justificación obligatoria)
+                        </label>
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <input
+                            id="ingreso_bodega_nota"
+                            style={{ flex: 1 }}
+                            placeholder="Motivo del ingreso sin checklist completo..."
+                            value={ingresoBodegaNota}
+                            onChange={(e) => setIngresoBodegaNota(e.target.value)}
+                          />
+                          <button
+                            className="btn-primary"
+                            disabled={enviando || !ingresoBodegaNota.trim()}
+                            title={
+                              requeridosPendientes.length > 0
+                                ? `Pendientes: ${requeridosPendientes.map((i) => i.nombre).join(", ")}`
+                                : undefined
+                            }
+                            onClick={() => handleEnviarTecnico(ingresoBodegaNota)}
+                          >
+                            {enviando ? "Registrando..." : "Registrar ingreso a bodega exitoso"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>

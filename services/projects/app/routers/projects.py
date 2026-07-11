@@ -7,6 +7,7 @@ from app.domain import EstadoItemChecklist
 from app.schemas import (
     ChecklistItemOut,
     ChecklistItemUpdate,
+    EnviarTecnicoIn,
     ProjectCreate,
     ProjectCreateOut,
     ProjectDetailOut,
@@ -102,3 +103,23 @@ def get_checklist_attachment(
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'inline; filename="{item.adjunto_nombre or numero}"'},
     )
+
+
+@router.post("/{crp_code}/enviar-tecnico", response_model=ProjectDetailOut)
+def enviar_a_tecnico(
+    crp_code: str,
+    payload: EnviarTecnicoIn,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        project_service.enviar_a_tecnico(db, current_user.role, crp_code, payload.ingreso_bodega_nota)
+        return project_service.get_project_detail(db, crp_code, current_user.role)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except project_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except project_service.NoChecklistError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except project_service.TransitionBlockedError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

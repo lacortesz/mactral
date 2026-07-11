@@ -302,3 +302,36 @@ def test_descargar_adjunto_inexistente_devuelve_404(client):
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "El ítem no tiene un adjunto"
+
+
+def test_enviar_a_tecnico_bloqueado_por_checklist_incompleto_via_api(client):
+    token = _token("COMERCIAL")
+    token_importaciones = _token("IMPORTACIONES")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/enviar-tecnico",
+        json={},
+        headers={"Authorization": f"Bearer {token_importaciones}"},
+    )
+    assert response.status_code == 422
+
+
+def test_enviar_a_tecnico_con_ingreso_a_bodega_via_api(client):
+    token = _token("COMERCIAL")
+    token_importaciones = _token("IMPORTACIONES")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/enviar-tecnico",
+        json={"ingreso_bodega_nota": "Cliente urgía la instalación"},
+        headers={"Authorization": f"Bearer {token_importaciones}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    tecnico = next(m for m in body["modulos"] if m["modulo"] == "tecnico")
+    assert tecnico["estado"] == "EN_CURSO"
