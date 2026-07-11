@@ -10,6 +10,8 @@ class ProjectSearchResult(BaseModel):
     crp_code: str
     cliente: str
     ciudad: str
+    etapa_actual: EstadoEtapa
+    semaforo_color: SemaforoColor
 
     model_config = {"from_attributes": True}
 

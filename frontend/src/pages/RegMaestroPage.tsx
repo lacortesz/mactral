@@ -10,6 +10,8 @@ type SearchResult = {
   crp_code: string;
   cliente: string;
   ciudad: string;
+  etapa_actual: EstadoEtapa;
+  semaforo_color: SemaforoColor;
 };
 
 type ModuleStatus = {
@@ -134,6 +136,7 @@ export default function RegMaestroPage() {
                 <th>Código CRP</th>
                 <th>Cliente</th>
                 <th>Ciudad</th>
+                <th>Estado</th>
                 <th />
               </tr>
             </thead>
@@ -143,6 +146,12 @@ export default function RegMaestroPage() {
                   <td>{r.crp_code}</td>
                   <td>{r.cliente}</td>
                   <td>{r.ciudad}</td>
+                  <td>
+                    {ESTADO_ETAPA_LABELS[r.etapa_actual]} ·{" "}
+                    <span style={{ color: SEMAFORO_COLORS[r.semaforo_color], fontWeight: 700 }}>
+                      {r.semaforo_color === "VERDE" ? "Verde" : r.semaforo_color === "AMARILLO" ? "Amarillo" : "Rojo"}
+                    </span>
+                  </td>
                   <td>
                     <button className="btn-link" onClick={() => handleSelect(r.crp_code)}>
                       Ver ficha

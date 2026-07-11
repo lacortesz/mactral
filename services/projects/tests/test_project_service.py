@@ -128,6 +128,31 @@ def test_search_projects_encuentra_por_nombre_de_cliente(db_session):
     assert len(results) == 1
 
 
+# --- E3-H2: búsqueda de proyecto por código CRP o cliente ------------------
+# La búsqueda ya existía desde E1-H3 (search_projects); estas pruebas
+# formalizan sus escenarios exactos, incluyendo el dato que faltaba en la
+# respuesta (etapa y semáforo junto al código).
+
+
+def test_e3h2_busqueda_por_codigo_exacto_devuelve_la_ficha(db_session):
+    _make_project(db_session)
+
+    results = project_service.search_projects(db_session, "GM26-03")
+
+    assert len(results) == 1
+    assert results[0].crp_code == "GM26-03"
+
+
+def test_e3h2_busqueda_por_cliente_incluye_codigo_estado_y_etapa(db_session):
+    _make_project(db_session)
+
+    results = project_service.search_projects(db_session, "san pedro")
+
+    assert results[0].crp_code == "GM26-03"
+    assert results[0].etapa_actual == EstadoEtapa.EN_CURSO
+    assert results[0].semaforo_color == SemaforoColor.AMARILLO
+
+
 def test_search_projects_sin_coincidencias_devuelve_lista_vacia(db_session):
     _make_project(db_session)
 
