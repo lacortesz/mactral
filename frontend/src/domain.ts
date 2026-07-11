@@ -55,13 +55,16 @@ export function moduleRoute(m: ModuleKey): string {
 }
 
 // E1-H3: catálogos de la ficha central del proyecto (CRP).
-export type EstadoEtapa = "PENDIENTE" | "EN_CURSO" | "CERRADO" | "BLOQUEADO";
+// E5-H2: ENTREGADO es el estado final del proyecto (solo etapa_actual, no
+// el estado por módulo).
+export type EstadoEtapa = "PENDIENTE" | "EN_CURSO" | "CERRADO" | "BLOQUEADO" | "ENTREGADO";
 
 export const ESTADO_ETAPA_LABELS: Record<EstadoEtapa, string> = {
   PENDIENTE: "Pendiente",
   EN_CURSO: "En curso",
   CERRADO: "Cerrado",
   BLOQUEADO: "Bloqueado",
+  ENTREGADO: "Entregado",
 };
 
 export type SemaforoColor = "VERDE" | "AMARILLO" | "ROJO";
