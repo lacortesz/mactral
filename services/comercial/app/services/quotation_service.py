@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain import EstadoLead
-from app.models import Quotation
+from app.models import EstadoHistorial, Quotation
 from app.pdf import build_quotation_pdf
 from app.schemas import QuotationCreate
 from app.services.lead_service import Actor, ForbiddenError, can_edit_lead, get_lead_detail
@@ -45,6 +45,15 @@ def create_quotation(db: Session, actor: Actor, lead_id: str, data: QuotationCre
     # vez que se genera una cotización. Al regenerar (versión > 1) el lead
     # ya está en Enviada o más adelante, así que no se toca.
     if lead.estado == EstadoLead.COTIZAR:
+        db.add(
+            EstadoHistorial(
+                lead_id=lead.id,
+                estado_anterior=EstadoLead.COTIZAR,
+                estado_nuevo=EstadoLead.ENVIADA,
+                usuario_id=actor.id,
+                usuario_nombre=actor.name,
+            )
+        )
         lead.estado = EstadoLead.ENVIADA
 
     db.commit()

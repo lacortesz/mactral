@@ -255,3 +255,100 @@ def test_otro_vendedor_no_puede_generar_cotizacion(client):
         headers={"Authorization": f"Bearer {token_otro}"},
     )
     assert response.status_code == 403
+
+
+def test_avanzar_estado_via_api_y_ver_historial(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "ENVIADA"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["estado"] == "ENVIADA"
+    assert len(body["historial_estados"]) == 1
+    assert body["historial_estados"][0]["estado_nuevo"] == "ENVIADA"
+
+
+def test_saltar_a_vendido_devuelve_422_con_mensaje_exacto(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "VENDIDO", "clasificacion": "GM"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+    assert "Primero cambia el estado a Enviada" in response.text
+
+
+def test_marcar_como_vendido_sin_clasificacion_devuelve_422(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "ENVIADA"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "VENDIDO"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+
+
+def test_marcar_como_vendido_con_clasificacion_via_api(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "ENVIADA"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "VENDIDO", "clasificacion": "STOCK_INDUSTRY"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["clasificacion"] == "STOCK_INDUSTRY"
+
+
+def test_otro_vendedor_no_puede_cambiar_estado(client):
+    token_creador = _token("COMERCIAL", sub="u1", name="Carlos Martínez")
+    token_otro = _token("COMERCIAL", sub="u2", name="María Angulo")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token_creador}"}
+    ).json()
+
+    response = client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "ENVIADA"},
+        headers={"Authorization": f"Bearer {token_otro}"},
+    )
+    assert response.status_code == 403
+
+
+def test_cambiar_estado_de_lead_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    response = client.patch(
+        "/leads/no-existe/estado",
+        json={"estado": "ENVIADA"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404

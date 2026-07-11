@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.domain import EstadoLead, LineaNegocio, TipoPago
+from app.domain import EstadoLead, LineaNegocio, TipoClasificacion, TipoPago
 
 
 def _values(enum_cls):
@@ -48,6 +48,13 @@ class Lead(Base):
     vendedor_id: Mapped[str] = mapped_column(String(36), nullable=False)
     vendedor_nombre: Mapped[str] = mapped_column(String(255), nullable=False)
 
+    # E2-H4: clasificación elegida al marcar el lead como Vendido. Es
+    # inmutable una vez confirmada salvo anulación explícita de Gerencia
+    # (ver ForbiddenError en estado_service.change_estado).
+    clasificacion: Mapped[TipoClasificacion | None] = mapped_column(
+        SAEnum(TipoClasificacion, name="tipo_clasificacion", values_callable=_values), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(), default=datetime.utcnow, onupdate=datetime.utcnow
@@ -58,6 +65,9 @@ class Lead(Base):
     )
     cotizaciones: Mapped[list["Quotation"]] = relationship(
         back_populates="lead", cascade="all, delete-orphan", order_by="Quotation.version"
+    )
+    historial_estados: Mapped[list["EstadoHistorial"]] = relationship(
+        back_populates="lead", cascade="all, delete-orphan", order_by="EstadoHistorial.fecha"
     )
 
 
@@ -122,3 +132,24 @@ class Quotation(Base):
     def numero_cotizacion(self) -> str:
         # Restricción E2-H2: el número de cotización es el consecutivo del lead.
         return f"{self.lead.codigo}-v{self.version}"
+
+
+class EstadoHistorial(Base):
+    """E2-H3: registro de cada cambio de estado del lead (secuencial, no
+    reversible), con fecha/hora y usuario que lo realizó."""
+
+    __tablename__ = "estado_historial"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    lead_id: Mapped[str] = mapped_column(ForeignKey("leads.id"), nullable=False)
+    estado_anterior: Mapped[EstadoLead] = mapped_column(
+        SAEnum(EstadoLead, name="estado_lead", values_callable=_values), nullable=False
+    )
+    estado_nuevo: Mapped[EstadoLead] = mapped_column(
+        SAEnum(EstadoLead, name="estado_lead", values_callable=_values), nullable=False
+    )
+    usuario_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    usuario_nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    fecha: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+
+    lead: Mapped["Lead"] = relationship(back_populates="historial_estados")

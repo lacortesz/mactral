@@ -21,6 +21,11 @@ Implementa:
   estimada de entrega) adjunta al lead con numeración basada en su
   consecutivo; el estado cambia automáticamente a Enviada la primera vez, y
   cada regeneración crea una nueva versión conservando el historial completo.
+- **E2-H3 — Cambio de estado del lead**: avance secuencial y no reversible
+  Cotizar → Enviada → Vendido, con historial de cada cambio (fecha/hora/
+  usuario); saltar un estado (p. ej. Cotizar → Vendido) queda bloqueado con
+  el mensaje "Primero cambia el estado a Enviada"; al marcar Vendido se pide
+  la clasificación GM/Stock y las etapas anteriores quedan en solo lectura.
 
 Ver `HU_AC_Mockups_GrupoMactral_v1_optimizado.pdf` (32 historias, 11 épicas)
 para las historias de usuario originales.
@@ -333,6 +338,23 @@ ahí no hay una restricción real, así que los tests unitarios no lo atrapan).
   desglose en vivo, historial de versiones y botón "Vista previa" que abre el
   PDF en una pestaña nueva (usando `comercialFetchBlob` porque un `<a href>`
   normal no puede enviar el header `Authorization`).
+
+### E2-H3
+- Cambio de estado (`PATCH /leads/{id}/estado`,
+  `services/comercial/app/services/estado_service.py`) → solo permite avanzar
+  al siguiente estado de `ESTADO_SIGUIENTE` (`app/domain.py`: `COTIZAR` →
+  `ENVIADA` → `VENDIDO`); cualquier salto o retroceso devuelve 422 con el
+  mensaje exacto "Primero cambia el estado a Enviada".
+- Cada cambio (incluida la transición automática de E2-H2 al generar la
+  primera cotización) queda registrado en `estado_historial` con fecha/hora
+  y usuario (`app/models.py`, `EstadoHistorial`).
+- Al marcar `VENDIDO` la API exige `clasificacion` (`GM` / `STOCK_MOBILITY` /
+  `STOCK_INDUSTRY`, prep de E2-H4) y la vuelve inmutable: un segundo intento
+  de cambiarla es rechazado salvo que el actor sea Gerencia.
+- Frontend: badge de estado, botón "Avanzar a Enviada" / "Marcar como
+  Vendido" (este último abre un modal para elegir la clasificación),
+  historial de cambios visible en la ficha del lead, e interacciones/
+  cotización pasan a solo lectura una vez el lead está `VENDIDO`.
 
 ## Notas de la migración de stack
 

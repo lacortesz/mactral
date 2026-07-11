@@ -7,11 +7,18 @@ import {
   CANAL_ENTRADA_OPTIONS,
   ESTADO_LEAD_LABELS,
   LINE_LABELS,
+  TIPO_CLASIFICACION_LABELS,
   TIPO_PAGO_LABELS,
   type EstadoLead,
   type LineaNegocio,
+  type TipoClasificacion,
   type TipoPago,
 } from "../domain";
+
+const ESTADO_SIGUIENTE: Partial<Record<EstadoLead, EstadoLead>> = {
+  COTIZAR: "ENVIADA",
+  ENVIADA: "VENDIDO",
+};
 
 type LeadListItem = {
   id: string;
@@ -44,14 +51,23 @@ type Quotation = {
   created_at: string;
 };
 
+type EstadoHistorialItem = {
+  estado_anterior: EstadoLead;
+  estado_nuevo: EstadoLead;
+  usuario_nombre: string;
+  fecha: string;
+};
+
 type LeadDetail = LeadListItem & {
   telefono: string | null;
   correo: string | null;
   canal_entrada: string;
   marca: string;
   vendedor_id: string;
+  clasificacion: TipoClasificacion | null;
   interacciones: Interaction[];
   cotizaciones: Quotation[];
+  historial_estados: EstadoHistorialItem[];
 };
 
 const EMPTY_QUOTATION_FORM = {
@@ -101,6 +117,11 @@ export default function ComercialPage() {
   const [quotationForm, setQuotationForm] = useState(EMPTY_QUOTATION_FORM);
   const [quotationError, setQuotationError] = useState<string | null>(null);
   const [generatingQuotation, setGeneratingQuotation] = useState(false);
+
+  const [estadoError, setEstadoError] = useState<string | null>(null);
+  const [changingEstado, setChangingEstado] = useState(false);
+  const [showClasificacionModal, setShowClasificacionModal] = useState(false);
+  const [clasificacion, setClasificacion] = useState<TipoClasificacion>("GM");
 
   useEffect(() => {
     if (!token) return;
@@ -187,6 +208,38 @@ export default function ComercialPage() {
     } finally {
       setGeneratingQuotation(false);
     }
+  }
+
+  async function advanceEstado(target: EstadoLead, clasificacionElegida?: TipoClasificacion) {
+    if (!selected) return;
+    setEstadoError(null);
+    setChangingEstado(true);
+    try {
+      const refreshed = await comercialApiFetch<LeadDetail>(`/leads/${selected.id}/estado`, {
+        method: "PATCH",
+        token,
+        body: clasificacionElegida ? { estado: target, clasificacion: clasificacionElegida } : { estado: target },
+      });
+      setSelected(refreshed);
+      setLeads((prev) => prev.map((l) => (l.id === refreshed.id ? { ...l, estado: refreshed.estado } : l)));
+      setShowClasificacionModal(false);
+    } catch (err) {
+      setEstadoError(err instanceof ApiError ? err.message : "No se pudo cambiar el estado");
+    } finally {
+      setChangingEstado(false);
+    }
+  }
+
+  function handleAvanzarClick() {
+    if (!selected) return;
+    const siguiente = ESTADO_SIGUIENTE[selected.estado];
+    if (!siguiente) return;
+    if (siguiente === "VENDIDO") {
+      setEstadoError(null);
+      setShowClasificacionModal(true);
+      return;
+    }
+    advanceEstado(siguiente);
   }
 
   async function viewQuotationPdf(leadId: string, version: number) {
@@ -366,8 +419,92 @@ export default function ComercialPage() {
         <>
           <div className="card">
             <h2 className="card-title">
-              {selected.codigo} · {selected.nombre}
+              {selected.codigo} · {selected.nombre}{" "}
+              <span className="badge badge-role">{ESTADO_LEAD_LABELS[selected.estado]}</span>
             </h2>
+            {estadoError && <div className="alert alert-error">{estadoError}</div>}
+
+            {selected.clasificacion && (
+              <p style={{ fontSize: 13, color: "var(--mactral-text-muted)" }}>
+                Clasificación: <strong>{TIPO_CLASIFICACION_LABELS[selected.clasificacion]}</strong>
+              </p>
+            )}
+
+            {ESTADO_SIGUIENTE[selected.estado] && (
+              <button className="btn-primary" onClick={handleAvanzarClick} disabled={changingEstado}>
+                {changingEstado
+                  ? "Cambiando..."
+                  : ESTADO_SIGUIENTE[selected.estado] === "VENDIDO"
+                    ? "Marcar como Vendido"
+                    : `Avanzar a ${ESTADO_LEAD_LABELS[ESTADO_SIGUIENTE[selected.estado] as EstadoLead]}`}
+              </button>
+            )}
+
+            {selected.historial_estados.length > 0 && (
+              <ul style={{ listStyle: "none", margin: "16px 0 0", padding: 0, fontSize: 13 }}>
+                {selected.historial_estados.map((h, idx) => (
+                  <li key={idx} style={{ padding: "4px 0", color: "var(--mactral-text-muted)" }}>
+                    {new Date(h.fecha).toLocaleString("es-CO")} — {ESTADO_LEAD_LABELS[h.estado_anterior]} →{" "}
+                    {ESTADO_LEAD_LABELS[h.estado_nuevo]} ({h.usuario_nombre})
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {showClasificacionModal && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.4)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 100,
+              }}
+            >
+              <div className="card" style={{ maxWidth: 420, margin: 0 }}>
+                <h2 className="card-title">Clasificación de la venta</h2>
+                <p style={{ fontSize: 13, color: "var(--mactral-text-muted)" }}>
+                  Elige la clasificación para activar el flujo correspondiente. Una vez confirmada
+                  no se puede modificar sin aprobación de Gerencia.
+                </p>
+                <div className="form-field">
+                  <label htmlFor="clasificacion">Clasificación</label>
+                  <select
+                    id="clasificacion"
+                    value={clasificacion}
+                    onChange={(e) => setClasificacion(e.target.value as TipoClasificacion)}
+                  >
+                    <option value="GM">{TIPO_CLASIFICACION_LABELS.GM}</option>
+                    <option value="STOCK_MOBILITY">{TIPO_CLASIFICACION_LABELS.STOCK_MOBILITY}</option>
+                    <option value="STOCK_INDUSTRY">{TIPO_CLASIFICACION_LABELS.STOCK_INDUSTRY}</option>
+                  </select>
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                  <button
+                    className="btn-primary"
+                    disabled={changingEstado}
+                    onClick={() => advanceEstado("VENDIDO", clasificacion)}
+                  >
+                    {changingEstado ? "Confirmando..." : "Confirmar"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    onClick={() => setShowClasificacionModal(false)}
+                    disabled={changingEstado}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <h2 className="card-title">Interacciones</h2>
             {interactionError && <div className="alert alert-error">{interactionError}</div>}
 
             <ul style={{ listStyle: "none", margin: "0 0 16px", padding: 0, fontSize: 13 }}>
@@ -383,27 +520,33 @@ export default function ComercialPage() {
               ))}
             </ul>
 
-            <form onSubmit={handleAddInteraction} style={{ display: "flex", gap: 10 }}>
-              <select
-                value={interactionForm.canal}
-                onChange={(e) => setInteractionForm({ ...interactionForm, canal: e.target.value })}
-              >
-                {CANAL_ENTRADA_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <input
-                style={{ flex: 1, border: "1px solid var(--mactral-border)", borderRadius: 6, padding: "9px 10px" }}
-                placeholder="Resumen de la interacción..."
-                value={interactionForm.resumen}
-                onChange={(e) => setInteractionForm({ ...interactionForm, resumen: e.target.value })}
-              />
-              <button type="submit" className="btn-primary">
-                Agregar nota
-              </button>
-            </form>
+            {selected.estado === "VENDIDO" ? (
+              <p style={{ fontSize: 13, color: "var(--mactral-text-muted)" }}>
+                Este lead ya fue vendido: las etapas anteriores quedaron en solo lectura.
+              </p>
+            ) : (
+              <form onSubmit={handleAddInteraction} style={{ display: "flex", gap: 10 }}>
+                <select
+                  value={interactionForm.canal}
+                  onChange={(e) => setInteractionForm({ ...interactionForm, canal: e.target.value })}
+                >
+                  {CANAL_ENTRADA_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  style={{ flex: 1, border: "1px solid var(--mactral-border)", borderRadius: 6, padding: "9px 10px" }}
+                  placeholder="Resumen de la interacción..."
+                  value={interactionForm.resumen}
+                  onChange={(e) => setInteractionForm({ ...interactionForm, resumen: e.target.value })}
+                />
+                <button type="submit" className="btn-primary">
+                  Agregar nota
+                </button>
+              </form>
+            )}
           </div>
 
           <div className="card">
@@ -439,6 +582,11 @@ export default function ComercialPage() {
               </table>
             )}
 
+            {selected.estado === "VENDIDO" ? (
+              <p style={{ fontSize: 13, color: "var(--mactral-text-muted)" }}>
+                Este lead ya fue vendido: la cotización quedó en solo lectura.
+              </p>
+            ) : (
             <form onSubmit={handleGenerateQuotation}>
               <div className="form-grid">
                 <div className="form-field">
@@ -549,6 +697,7 @@ export default function ComercialPage() {
                     : "Generar cotización PDF"}
               </button>
             </form>
+            )}
           </div>
         </>
       )}

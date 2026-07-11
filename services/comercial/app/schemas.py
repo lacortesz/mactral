@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, model_validator
 
-from app.domain import EstadoLead, LineaNegocio, TipoPago
+from app.domain import EstadoLead, LineaNegocio, TipoClasificacion, TipoPago
 
 REQUIRED_FIELDS_MESSAGE = "Completa los campos requeridos"
 
@@ -90,6 +90,28 @@ class QuotationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EstadoHistorialOut(BaseModel):
+    estado_anterior: EstadoLead
+    estado_nuevo: EstadoLead
+    usuario_nombre: str
+    fecha: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EstadoChange(BaseModel):
+    estado: EstadoLead
+    clasificacion: TipoClasificacion | None = None
+
+    @model_validator(mode="after")
+    def check_clasificacion_al_vender(self):
+        # Restricción E2-H3/E2-H4: al cerrar la venta el sistema pide la
+        # clasificación (GM / Stock Mobility / Stock Industry) de una vez.
+        if self.estado == EstadoLead.VENDIDO and self.clasificacion is None:
+            raise ValueError("Selecciona una clasificación (GM o Stock) para marcar el lead como Vendido")
+        return self
+
+
 class LeadDetailOut(BaseModel):
     id: str
     codigo: str
@@ -102,11 +124,13 @@ class LeadDetailOut(BaseModel):
     tipo_producto: str
     marca: str
     estado: EstadoLead
+    clasificacion: TipoClasificacion | None
     vendedor_id: str
     vendedor_nombre: str
     created_at: datetime
     interacciones: list[InteractionOut]
     cotizaciones: list[QuotationOut] = []
+    historial_estados: list[EstadoHistorialOut] = []
 
     model_config = {"from_attributes": True}
 
