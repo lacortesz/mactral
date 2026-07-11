@@ -53,6 +53,26 @@ const SEMAFORO_CLASSES: Record<Tablero["semaforo_pago"], string> = {
   ROJO: "badge-status-inactivo",
 };
 
+type CuentaPorPagar = {
+  id: string;
+  crp_code: string;
+  tipo: string;
+  proveedor: string;
+  concepto: string;
+  monto: number;
+  moneda: string;
+  monto_cop: number;
+  fecha_vencimiento: string;
+  estado: "PENDIENTE" | "PAGADA";
+  autorizado_gg: boolean;
+};
+
+type CxpConsolidado = {
+  items: CuentaPorPagar[];
+  total_pendiente_cop: number;
+  total_pagado_cop: number;
+};
+
 const EMPTY_CUOTA = { etiqueta: "", monto: "", porcentaje: "", fecha_vencimiento: "" };
 
 export default function FinancieroPage() {
@@ -82,6 +102,34 @@ export default function FinancieroPage() {
   const [pagoForms, setPagoForms] = useState<Record<number, { fecha_pago: string; monto_pagado: string; referencia_bancaria: string }>>({});
   const [pagoError, setPagoError] = useState<string | null>(null);
   const [pagoSaving, setPagoSaving] = useState<number | null>(null);
+
+  const [cxp, setCxp] = useState<CxpConsolidado | null>(null);
+  const [cxpError, setCxpError] = useState<string | null>(null);
+  const [filtroProveedor, setFiltroProveedor] = useState("");
+  const [filtroMoneda, setFiltroMoneda] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("");
+
+  async function loadCxp() {
+    setCxpError(null);
+    try {
+      const params = new URLSearchParams();
+      if (filtroProveedor) params.set("proveedor", filtroProveedor);
+      if (filtroMoneda) params.set("moneda", filtroMoneda);
+      if (filtroEstado) params.set("estado", filtroEstado);
+      const found = await projectsApiFetch<CxpConsolidado>(`/cuentas-por-pagar?${params.toString()}`, {
+        token,
+        method: "GET",
+      });
+      setCxp(found);
+    } catch (err) {
+      setCxpError(err instanceof ApiError ? err.message : "No se pudo cargar el consolidado de cuentas por pagar");
+    }
+  }
+
+  useEffect(() => {
+    loadCxp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSearch(event: FormEvent) {
     event.preventDefault();
@@ -471,6 +519,92 @@ export default function FinancieroPage() {
           )}
         </div>
       )}
+
+      <div className="card">
+        <h2 className="card-title">Cuentas por pagar (consolidado)</h2>
+        <p className="page-subtitle">Gastos logísticos y obligaciones con proveedores de todos los proyectos</p>
+
+        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          <input
+            placeholder="Proveedor..."
+            value={filtroProveedor}
+            onChange={(e) => setFiltroProveedor(e.target.value)}
+            style={{ border: "1px solid var(--mactral-border)", borderRadius: 6, padding: "9px 10px" }}
+          />
+          <select value={filtroMoneda} onChange={(e) => setFiltroMoneda(e.target.value)}>
+            <option value="">Moneda (todas)</option>
+            <option value="COP">COP</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="CNY">CNY</option>
+          </select>
+          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
+            <option value="">Estado (todos)</option>
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="PAGADA">Pagada</option>
+          </select>
+          <button className="btn-primary" onClick={loadCxp}>
+            Filtrar
+          </button>
+        </div>
+
+        {cxpError && <div className="alert alert-error">{cxpError}</div>}
+
+        {cxp && (
+          <>
+            <div className="form-grid" style={{ marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 12, color: "var(--mactral-text-muted)" }}>Total pendiente (COP)</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>${cxp.total_pendiente_cop.toLocaleString("es-CO")}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "var(--mactral-text-muted)" }}>Total pagado (COP)</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>${cxp.total_pagado_cop.toLocaleString("es-CO")}</div>
+              </div>
+            </div>
+
+            {cxp.items.length === 0 ? (
+              <p style={{ color: "var(--mactral-text-muted)", fontSize: 13 }}>No hay cuentas por pagar registradas.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Proyecto</th>
+                    <th>Tipo</th>
+                    <th>Proveedor</th>
+                    <th>Concepto</th>
+                    <th>Monto</th>
+                    <th>Monto (COP)</th>
+                    <th>Vencimiento</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cxp.items.map((i) => (
+                    <tr key={i.id}>
+                      <td>{i.crp_code}</td>
+                      <td>{i.tipo}</td>
+                      <td>{i.proveedor}</td>
+                      <td>{i.concepto}</td>
+                      <td>
+                        {i.moneda} {i.monto.toLocaleString("es-CO")}
+                      </td>
+                      <td>${i.monto_cop.toLocaleString("es-CO")}</td>
+                      <td>{new Date(i.fecha_vencimiento + "T00:00:00").toLocaleDateString("es-CO")}</td>
+                      <td>
+                        <span className={`badge ${i.estado === "PAGADA" ? "badge-status-activo" : "badge-role"}`}>
+                          {i.estado === "PAGADA" ? "Pagada" : "Pendiente"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
     </AppShell>
   );
 }

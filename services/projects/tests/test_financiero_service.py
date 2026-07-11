@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 from pydantic import ValidationError
 
-from app.domain import Modulo, Rol, TipoGastoLogistico
+from app.domain import EstadoCuentaPorPagar, Modulo, Rol, TipoGastoLogistico
 from app.models import CuentaPorPagar
 from app.schemas import CuotaIn, CuotaPagoCreate, CuotasConfigCreate, ModuleStatusIn, ProjectCreate
 from app.services import financiero_service, project_service
@@ -241,3 +241,76 @@ def test_tablero_financiero_semaforo_amarillo_por_cuota_proxima(db_session):
 def test_tablero_financiero_de_proyecto_inexistente_lanza_error(db_session):
     with pytest.raises(project_service.ProjectNotFoundError):
         financiero_service.get_tablero(db_session, "GM26-999")
+
+
+# E7-H3: tablero consolidado de cuentas por pagar.
+def _make_cxp(db_session, project, **overrides):
+    defaults = dict(
+        project_id=project.id,
+        tipo=TipoGastoLogistico.VUELO,
+        proveedor="Avianca",
+        concepto="Tiquetes instalación",
+        monto=1_500_000,
+        moneda="COP",
+        fecha_vencimiento=date(2026, 8, 5),
+    )
+    defaults.update(overrides)
+    cxp = CuentaPorPagar(**defaults)
+    db_session.add(cxp)
+    db_session.commit()
+    return cxp
+
+
+def test_listar_cuentas_por_pagar_consolidado(db_session):
+    proyecto_a = _make_project(db_session)
+    proyecto_b = project_service.create_project(
+        db_session,
+        ProjectCreate(
+            crp_prefix="GM",
+            tipo="GM - Importación",
+            cliente="Otro cliente",
+            ciudad="Cali",
+            producto="SSE Recta",
+            marca="Stannah",
+            modulos=[ModuleStatusIn(modulo=Modulo.COMERCIAL, estado="CERRADO")],
+            evento_origen="Comercial",
+            evento_mensaje="Venta cerrada",
+        ),
+    )
+    _make_cxp(db_session, proyecto_a, proveedor="Avianca", monto=1_000_000)
+    _make_cxp(db_session, proyecto_b, proveedor="Hotel Dann", monto=500_000, estado=EstadoCuentaPorPagar.PAGADA)
+
+    resultado = financiero_service.list_cuentas_por_pagar(db_session, ADMIN_FINANCIERO)
+
+    assert len(resultado.items) == 2
+    assert resultado.total_pendiente_cop == 1_000_000
+    assert resultado.total_pagado_cop == 500_000
+
+
+def test_filtrar_cuentas_por_pagar_por_proveedor(db_session):
+    proyecto = _make_project(db_session)
+    _make_cxp(db_session, proyecto, proveedor="Avianca")
+    _make_cxp(db_session, proyecto, proveedor="Hotel Dann")
+
+    resultado = financiero_service.list_cuentas_por_pagar(db_session, ADMIN_FINANCIERO, proveedor="avianca")
+
+    assert len(resultado.items) == 1
+    assert resultado.items[0].proveedor == "Avianca"
+
+
+def test_filtrar_cuentas_por_pagar_por_proyecto_y_moneda(db_session):
+    proyecto = _make_project(db_session)
+    _make_cxp(db_session, proyecto, moneda="USD", tasa_cop=4050.0, monto=100)
+    _make_cxp(db_session, proyecto, moneda="COP")
+
+    resultado = financiero_service.list_cuentas_por_pagar(
+        db_session, ADMIN_FINANCIERO, crp_code=proyecto.crp_code, moneda="USD"
+    )
+
+    assert len(resultado.items) == 1
+    assert resultado.items[0].monto_cop == 405_000.0
+
+
+def test_otro_rol_no_puede_ver_cuentas_por_pagar(db_session):
+    with pytest.raises(project_service.ForbiddenError):
+        financiero_service.list_cuentas_por_pagar(db_session, OTRO_ROL)

@@ -651,3 +651,18 @@ def test_tablero_financiero_de_proyecto_inexistente_devuelve_404_via_api(client)
     token = _token("COMERCIAL")
     response = client.get("/projects/NO-EXISTE/tablero-financiero", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404
+
+
+def test_cuentas_por_pagar_consolidado_via_api(client):
+    token_admin = _token("ADMINISTRATIVO")
+    response = client.get("/cuentas-por-pagar", headers={"Authorization": f"Bearer {token_admin}"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["total_pendiente_cop"] == 0
+
+
+def test_cuentas_por_pagar_consolidado_otro_rol_devuelve_403(client):
+    token = _token("COMERCIAL")
+    response = client.get("/cuentas-por-pagar", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403

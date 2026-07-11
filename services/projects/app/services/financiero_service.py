@@ -6,13 +6,21 @@ from sqlalchemy.orm import Session
 
 from app.domain import (
     TASAS_CAMBIO_REFERENCIA,
+    EstadoCuentaPorPagar,
     EstadoCuota,
     Rol,
     calcular_semaforo_pago,
     can_manage_financiero,
 )
-from app.models import Cuota, Project, ProjectEvent
-from app.schemas import CuotaPagoCreate, CuotasConfigCreate, TableroFinancieroOut, TasaCambioOut
+from app.models import CuentaPorPagar, Cuota, Project, ProjectEvent
+from app.schemas import (
+    CuentaPorPagarOut,
+    CuentasPorPagarConsolidadoOut,
+    CuotaPagoCreate,
+    CuotasConfigCreate,
+    TableroFinancieroOut,
+    TasaCambioOut,
+)
 from app.services.project_service import ForbiddenError, get_project_by_code
 
 
@@ -130,4 +138,56 @@ def get_tablero(db: Session, crp_code: str) -> TableroFinancieroOut:
         semaforo_pago=calcular_semaforo_pago(project.cuotas),
         cuotas=project.cuotas,
         tasas_cambio=[TasaCambioOut(moneda=m, tasa_cop=t) for m, t in TASAS_CAMBIO_REFERENCIA.items()],
+    )
+
+
+def list_cuentas_por_pagar(
+    db: Session,
+    actor: Actor,
+    proveedor: str | None = None,
+    crp_code: str | None = None,
+    moneda: str | None = None,
+    estado: EstadoCuentaPorPagar | None = None,
+) -> CuentasPorPagarConsolidadoOut:
+    """E7-H3: tablero consolidado de CxP de todos los proyectos, con filtros
+    de proveedor/proyecto/moneda/estado."""
+    if not can_manage_financiero(actor.role):
+        raise ForbiddenError("Solo Administrativo (Financiero) o Gerencia pueden ver el tablero de CxP.")
+
+    query = db.query(CuentaPorPagar).join(Project, CuentaPorPagar.project_id == Project.id)
+    if proveedor:
+        query = query.filter(CuentaPorPagar.proveedor.ilike(f"%{proveedor}%"))
+    if crp_code:
+        query = query.filter(Project.crp_code == crp_code)
+    if moneda:
+        query = query.filter(CuentaPorPagar.moneda == moneda)
+    if estado:
+        query = query.filter(CuentaPorPagar.estado == estado)
+    query = query.order_by(CuentaPorPagar.fecha_vencimiento)
+
+    rows = query.all()
+    items = [
+        CuentaPorPagarOut(
+            id=cxp.id,
+            crp_code=cxp.project.crp_code,
+            tipo=cxp.tipo,
+            proveedor=cxp.proveedor,
+            concepto=cxp.concepto,
+            monto=cxp.monto,
+            moneda=cxp.moneda,
+            tasa_cop=cxp.tasa_cop,
+            monto_cop=cxp.monto_cop,
+            fecha_vencimiento=cxp.fecha_vencimiento,
+            estado=cxp.estado,
+            fecha_pago=cxp.fecha_pago,
+            tiene_soporte=cxp.tiene_soporte,
+            autorizado_gg=cxp.autorizado_gg,
+        )
+        for cxp in rows
+    ]
+
+    return CuentasPorPagarConsolidadoOut(
+        items=items,
+        total_pendiente_cop=sum(i.monto_cop for i in items if i.estado == EstadoCuentaPorPagar.PENDIENTE),
+        total_pagado_cop=sum(i.monto_cop for i in items if i.estado == EstadoCuentaPorPagar.PAGADA),
     )

@@ -3,12 +3,14 @@ from datetime import date, datetime
 from pydantic import BaseModel, model_validator
 
 from app.domain import (
+    EstadoCuentaPorPagar,
     EstadoCuota,
     EstadoEtapa,
     EstadoInstalacion,
     EstadoItemChecklist,
     Modulo,
     SemaforoColor,
+    TipoGastoLogistico,
     TipoItemChecklist,
 )
 
@@ -221,6 +223,35 @@ class TableroFinancieroOut(BaseModel):
     semaforo_pago: SemaforoColor
     cuotas: list[CuotaOut]
     tasas_cambio: list[TasaCambioOut]
+
+
+class CuentaPorPagarOut(BaseModel):
+    """E7-H3: fila del tablero consolidado de cuentas por pagar (también es
+    la fuente del registro de gasto logístico de E8-H1, imputado
+    automáticamente al proyecto por su project_id — E8-H3)."""
+
+    id: str
+    crp_code: str
+    tipo: TipoGastoLogistico
+    proveedor: str
+    concepto: str
+    monto: int
+    moneda: str
+    tasa_cop: float | None
+    monto_cop: float
+    fecha_vencimiento: date
+    estado: EstadoCuentaPorPagar
+    fecha_pago: date | None
+    tiene_soporte: bool
+    autorizado_gg: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CuentasPorPagarConsolidadoOut(BaseModel):
+    items: list[CuentaPorPagarOut]
+    total_pendiente_cop: float
+    total_pagado_cop: float
 
 
 class ProjectDetailOut(BaseModel):
