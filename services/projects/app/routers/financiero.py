@@ -3,11 +3,34 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import CurrentUser, get_current_user
-from app.schemas import CuotaOut, CuotaPagoCreate, CuotasConfigCreate, TableroFinancieroOut
+from app.domain import EstadoCuentaPorPagar
+from app.schemas import (
+    CuentasPorPagarConsolidadoOut,
+    CuotaOut,
+    CuotaPagoCreate,
+    CuotasConfigCreate,
+    TableroFinancieroOut,
+)
 from app.services import financiero_service, project_service
 
 router = APIRouter(prefix="/projects/{crp_code}/cuotas", tags=["financiero"])
 tablero_router = APIRouter(prefix="/projects/{crp_code}/tablero-financiero", tags=["financiero"])
+cxp_router = APIRouter(prefix="/cuentas-por-pagar", tags=["financiero"])
+
+
+@cxp_router.get("", response_model=CuentasPorPagarConsolidadoOut)
+def get_cuentas_por_pagar(
+    proveedor: str | None = None,
+    crp_code: str | None = None,
+    moneda: str | None = None,
+    estado: EstadoCuentaPorPagar | None = None,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        return financiero_service.list_cuentas_por_pagar(db, current_user, proveedor, crp_code, moneda, estado)
+    except project_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 @tablero_router.get("", response_model=TableroFinancieroOut)
