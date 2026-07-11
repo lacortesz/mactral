@@ -19,9 +19,25 @@ class Actor(Protocol):
     role: Rol
 
 
+class GastoLogisticoNotFoundError(Exception):
+    pass
+
+
 def list_gastos_logisticos(db: Session, crp_code: str) -> list[CuentaPorPagar]:
     project = get_project_by_code(db, crp_code)
     return project.cuentas_por_pagar
+
+
+def _get_gasto(project, gasto_id: str) -> CuentaPorPagar:
+    for cxp in project.cuentas_por_pagar:
+        if cxp.id == gasto_id:
+            return cxp
+    raise GastoLogisticoNotFoundError(f"El gasto logístico {gasto_id} no existe en este proyecto")
+
+
+def get_gasto_attachment(db: Session, crp_code: str, gasto_id: str) -> CuentaPorPagar:
+    project = get_project_by_code(db, crp_code)
+    return _get_gasto(project, gasto_id)
 
 
 def registrar_gasto_logistico(db: Session, actor: Actor, crp_code: str, data: CuentaPorPagarCreate) -> CuentaPorPagar:
@@ -48,6 +64,32 @@ def registrar_gasto_logistico(db: Session, actor: Actor, crp_code: str, data: Cu
             origen="Logística",
             mensaje=f"Gasto logístico registrado: {data.tipo.value} — {data.proveedor} — "
             f"{data.moneda} {data.monto:,.0f}".replace(",", "."),
+        )
+    )
+    db.commit()
+    db.refresh(cxp)
+    return cxp
+
+
+def adjuntar_soporte(
+    db: Session, actor: Actor, crp_code: str, gasto_id: str, soporte_bytes: bytes, soporte_nombre: str
+) -> CuentaPorPagar:
+    """E8-H2: carga del soporte (factura/comprobante) de un gasto logístico
+    ya registrado."""
+    if not can_manage_logistica(actor.role):
+        raise ForbiddenError("Solo Administrativo (Logística) o Gerencia pueden adjuntar soportes.")
+
+    project = get_project_by_code(db, crp_code)
+    cxp = _get_gasto(project, gasto_id)
+    cxp.soporte_bytes = soporte_bytes
+    cxp.soporte_nombre = soporte_nombre
+
+    db.add(
+        ProjectEvent(
+            project_id=project.id,
+            fecha=datetime.utcnow(),
+            origen="Logística",
+            mensaje=f"Soporte adjuntado al gasto logístico: {cxp.proveedor} — {cxp.concepto}",
         )
     )
     db.commit()

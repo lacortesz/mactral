@@ -784,3 +784,50 @@ def test_listar_gastos_logisticos_de_proyecto_inexistente_devuelve_404(client):
     token = _token("COMERCIAL")
     response = client.get("/projects/NO-EXISTE/logistica", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404
+
+
+def test_adjuntar_soporte_a_gasto_logistico_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    gasto = client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=GASTO_LOGISTICO_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    ).json()
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/logistica/{gasto['id']}/soporte",
+        files={"soporte": ("factura.pdf", b"%PDF-fake-factura", "application/pdf")},
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["tiene_soporte"] is True
+
+    download = client.get(
+        f"/projects/{created['crp_code']}/logistica/{gasto['id']}/soporte",
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert download.status_code == 200
+    assert download.content == b"%PDF-fake-factura"
+
+
+def test_descargar_soporte_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    gasto = client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=GASTO_LOGISTICO_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    ).json()
+
+    response = client.get(
+        f"/projects/{created['crp_code']}/logistica/{gasto['id']}/soporte",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404

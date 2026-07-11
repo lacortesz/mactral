@@ -145,3 +145,41 @@ def test_gasto_logistico_se_imputa_automaticamente_al_consolidado_cxp(db_session
     consolidado = financiero_service.list_cuentas_por_pagar(db_session, ADMIN_LOGISTICA, crp_code=project.crp_code)
     assert len(consolidado.items) == 1
     assert consolidado.items[0].proveedor == "Avianca"
+
+
+# E8-H2: carga de soportes de gastos logísticos.
+def test_adjuntar_soporte_a_gasto_logistico(db_session):
+    project = _make_project(db_session)
+    cxp = logistica_service.registrar_gasto_logistico(db_session, ADMIN_LOGISTICA, project.crp_code, VUELO_PAYLOAD)
+
+    updated = logistica_service.adjuntar_soporte(
+        db_session, ADMIN_LOGISTICA, project.crp_code, cxp.id, b"%PDF-fake", "factura.pdf"
+    )
+
+    assert updated.tiene_soporte is True
+    assert updated.soporte_nombre == "factura.pdf"
+    detail = project_service.get_project_detail(db_session, project.crp_code, Rol.ADMINISTRATIVO)
+    assert any("Soporte adjuntado" in e.mensaje for e in detail.linea_de_tiempo)
+
+
+def test_adjuntar_soporte_a_gasto_inexistente_lanza_error(db_session):
+    project = _make_project(db_session)
+    with pytest.raises(logistica_service.GastoLogisticoNotFoundError):
+        logistica_service.adjuntar_soporte(
+            db_session, ADMIN_LOGISTICA, project.crp_code, "no-existe", b"data", "a.pdf"
+        )
+
+
+def test_adjuntar_soporte_otro_rol_lanza_forbidden(db_session):
+    project = _make_project(db_session)
+    cxp = logistica_service.registrar_gasto_logistico(db_session, ADMIN_LOGISTICA, project.crp_code, VUELO_PAYLOAD)
+    with pytest.raises(project_service.ForbiddenError):
+        logistica_service.adjuntar_soporte(db_session, OTRO_ROL, project.crp_code, cxp.id, b"data", "a.pdf")
+
+
+def test_get_gasto_attachment_de_gasto_sin_soporte(db_session):
+    project = _make_project(db_session)
+    cxp = logistica_service.registrar_gasto_logistico(db_session, ADMIN_LOGISTICA, project.crp_code, VUELO_PAYLOAD)
+
+    found = logistica_service.get_gasto_attachment(db_session, project.crp_code, cxp.id)
+    assert found.tiene_soporte is False

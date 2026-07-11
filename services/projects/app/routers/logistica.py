@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -55,3 +55,49 @@ def registrar_gasto_logistico(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except project_service.ForbiddenError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.patch("/{gasto_id}/soporte", response_model=CuentaPorPagarOut)
+async def adjuntar_soporte(
+    crp_code: str,
+    gasto_id: str,
+    soporte: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    soporte_bytes = await soporte.read()
+    try:
+        cxp = logistica_service.adjuntar_soporte(
+            db, current_user, crp_code, gasto_id, soporte_bytes, soporte.filename
+        )
+        return _to_out(cxp)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except project_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except logistica_service.GastoLogisticoNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/{gasto_id}/soporte")
+def get_soporte_attachment(
+    crp_code: str,
+    gasto_id: str,
+    db: Session = Depends(get_db),
+    _current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        cxp = logistica_service.get_gasto_attachment(db, crp_code, gasto_id)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except logistica_service.GastoLogisticoNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    if cxp.soporte_bytes is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El gasto no tiene un soporte adjunto")
+
+    return Response(
+        content=cxp.soporte_bytes,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{cxp.soporte_nombre or gasto_id}"'},
+    )

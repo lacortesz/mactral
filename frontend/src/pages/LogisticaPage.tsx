@@ -1,6 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, projectsApiFetch } from "../api/client";
+import {
+  ApiError,
+  projectsApiFetch,
+  projectsApiFetchMultipart,
+  projectsFetchBlob,
+} from "../api/client";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../context/AuthContext";
 
@@ -27,6 +32,7 @@ type GastoLogistico = {
   fecha_vencimiento: string;
   estado: "PENDIENTE" | "PAGADA";
   autorizado_gg: boolean;
+  tiene_soporte: boolean;
 };
 
 const TIPO_LABELS: Record<GastoLogistico["tipo"], string> = {
@@ -130,6 +136,48 @@ export default function LogisticaPage() {
       setFormError(err instanceof ApiError ? err.message : "No se pudo registrar el gasto logístico");
     } finally {
       setSaving(false);
+    }
+  }
+
+  const [soporteFiles, setSoporteFiles] = useState<Record<string, File | null>>({});
+  const [soporteSaving, setSoporteSaving] = useState<string | null>(null);
+  const [soporteError, setSoporteError] = useState<string | null>(null);
+
+  async function handleSubirSoporte(gastoId: string) {
+    if (!selected) return;
+    const file = soporteFiles[gastoId];
+    if (!file) return;
+    setSoporteError(null);
+    setSoporteSaving(gastoId);
+    try {
+      const formData = new FormData();
+      formData.append("soporte", file);
+      await projectsApiFetchMultipart(
+        `/projects/${encodeURIComponent(selected.crp_code)}/logistica/${gastoId}/soporte`,
+        formData,
+        token
+      );
+      await loadGastos(selected.crp_code);
+    } catch (err) {
+      setSoporteError(err instanceof ApiError ? err.message : "No se pudo adjuntar el soporte");
+    } finally {
+      setSoporteSaving(null);
+    }
+  }
+
+  async function handleViewSoporte(gastoId: string) {
+    if (!selected) return;
+    const tab = window.open("", "_blank");
+    try {
+      const blob = await projectsFetchBlob(
+        `/projects/${encodeURIComponent(selected.crp_code)}/logistica/${gastoId}/soporte`,
+        token
+      );
+      const url = URL.createObjectURL(blob);
+      if (tab) tab.location.href = url;
+    } catch (err) {
+      tab?.close();
+      setSoporteError(err instanceof ApiError ? err.message : "No se pudo abrir el soporte");
     }
   }
 
@@ -276,7 +324,9 @@ export default function LogisticaPage() {
             </p>
           ) : (
             gastos && (
-              <table>
+              <>
+                {soporteError && <div className="alert alert-error">{soporteError}</div>}
+                <table>
                 <thead>
                   <tr>
                     <th>Tipo</th>
@@ -285,6 +335,7 @@ export default function LogisticaPage() {
                     <th>Monto</th>
                     <th>Fecha</th>
                     <th>Estado</th>
+                    <th>Soporte</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -302,10 +353,34 @@ export default function LogisticaPage() {
                           {g.estado === "PAGADA" ? "Pagada" : "Pendiente"}
                         </span>
                       </td>
+                      <td>
+                        {g.tiene_soporte ? (
+                          <button className="btn-link" onClick={() => handleViewSoporte(g.id)}>
+                            Ver soporte
+                          </button>
+                        ) : (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <input
+                              type="file"
+                              onChange={(e) =>
+                                setSoporteFiles((prev) => ({ ...prev, [g.id]: e.target.files?.[0] ?? null }))
+                              }
+                            />
+                            <button
+                              className="btn-primary"
+                              disabled={soporteSaving === g.id || !soporteFiles[g.id]}
+                              onClick={() => handleSubirSoporte(g.id)}
+                            >
+                              {soporteSaving === g.id ? "..." : "Subir"}
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </>
             )
           )}
         </div>
