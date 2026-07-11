@@ -1,11 +1,25 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum as SAEnum,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.domain import EstadoEtapa, Modulo, SemaforoColor
+from app.domain import EstadoEtapa, EstadoItemChecklist, Modulo, SemaforoColor, TipoItemChecklist
+
+
+def _values(enum_cls):
+    return [e.value for e in enum_cls]
 
 
 class Project(Base):
@@ -30,11 +44,22 @@ class Project(Base):
         DateTime(), default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
+    # E4-H2: evita disparar la notificación de Anticipo 2 más de una vez.
+    notificado_anticipo2: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # E4-H3 escenario 2: excepción de "ingreso a bodega" cuando el checklist
+    # queda con ítems pendientes pero se confirma el ingreso igualmente.
+    ingreso_bodega_fecha: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    ingreso_bodega_nota: Mapped[str | None] = mapped_column(Text(), nullable=True)
+
     module_statuses: Mapped[list["ProjectModuleStatus"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ProjectModuleStatus.modulo"
     )
     events: Mapped[list["ProjectEvent"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ProjectEvent.fecha"
+    )
+    checklist_items: Mapped[list["ImportChecklistItem"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", order_by="ImportChecklistItem.orden"
     )
 
 
@@ -67,6 +92,37 @@ class ProjectEvent(Base):
     mensaje: Mapped[str] = mapped_column(Text(), nullable=False)
 
     project: Mapped["Project"] = relationship(back_populates="events")
+
+
+class ImportChecklistItem(Base):
+    """E4-H1: checklist documental de importación (solo proyectos GM)."""
+
+    __tablename__ = "import_checklist_items"
+    __table_args__ = (UniqueConstraint("project_id", "numero", name="uq_checklist_item"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    orden: Mapped[int] = mapped_column(Integer, nullable=False)
+    numero: Mapped[str] = mapped_column(String(8), nullable=False)
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    tipo: Mapped[TipoItemChecklist] = mapped_column(
+        SAEnum(TipoItemChecklist, name="tipo_item_checklist", values_callable=_values), nullable=False
+    )
+    estado: Mapped[EstadoItemChecklist] = mapped_column(
+        SAEnum(EstadoItemChecklist, name="estado_item_checklist", values_callable=_values),
+        nullable=False,
+        default=EstadoItemChecklist.PENDIENTE,
+    )
+    fecha: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    nota: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    adjunto_bytes: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
+    adjunto_nombre: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    project: Mapped["Project"] = relationship(back_populates="checklist_items")
+
+    @property
+    def tiene_adjunto(self) -> bool:
+        return self.adjunto_bytes is not None
 
 
 class ProjectCounter(Base):

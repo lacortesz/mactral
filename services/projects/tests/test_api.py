@@ -188,3 +188,117 @@ def test_crear_registro_maestro_con_prefijo_invalido_devuelve_422(client):
 def test_crear_registro_maestro_sin_token_devuelve_401(client):
     response = client.post("/projects", json=GM_CREATE_PAYLOAD)
     assert response.status_code == 401
+
+
+def test_crear_gm_siembra_checklist_visible_en_la_ficha(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    detail = client.get(
+        f"/projects/{created['crp_code']}", headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    assert len(detail["checklist"]) == 14
+    assert detail["checklist"][0]["estado"] == "PENDIENTE"
+
+
+def test_archivar_item_del_checklist_con_adjunto_via_api(client):
+    token_creador = _token("COMERCIAL")
+    token_importaciones = _token("IMPORTACIONES")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token_creador}"}
+    ).json()
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/checklist/4",
+        data={"estado": "ARCHIVADO"},
+        files={"archivo": ("swift.pdf", b"%PDF-fake", "application/pdf")},
+        headers={"Authorization": f"Bearer {token_importaciones}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["estado"] == "ARCHIVADO"
+    assert body["tiene_adjunto"] is True
+
+    download = client.get(
+        f"/projects/{created['crp_code']}/checklist/4/adjunto",
+        headers={"Authorization": f"Bearer {token_importaciones}"},
+    )
+    assert download.status_code == 200
+    assert download.content == b"%PDF-fake"
+
+
+def test_marcar_no_aplica_sin_nota_devuelve_422_via_api(client):
+    token = _token("COMERCIAL")
+    token_importaciones = _token("IMPORTACIONES")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/checklist/11",
+        data={"estado": "NO_APLICA"},
+        headers={"Authorization": f"Bearer {token_importaciones}"},
+    )
+    assert response.status_code == 422
+
+
+def test_otro_rol_no_puede_cambiar_checklist_via_api(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/checklist/1",
+        data={"estado": "ARCHIVADO"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
+
+
+def test_cambiar_checklist_de_proyecto_inexistente_devuelve_404(client):
+    token = _token("IMPORTACIONES")
+    response = client.patch(
+        "/projects/NO-EXISTE/checklist/1",
+        data={"estado": "ARCHIVADO"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404
+
+
+def test_cambiar_item_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    token_importaciones = _token("IMPORTACIONES")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/checklist/99",
+        data={"estado": "ARCHIVADO"},
+        headers={"Authorization": f"Bearer {token_importaciones}"},
+    )
+    assert response.status_code == 404
+
+
+def test_descargar_adjunto_de_proyecto_inexistente_devuelve_404(client):
+    token = _token("IMPORTACIONES")
+    response = client.get(
+        "/projects/NO-EXISTE/checklist/1/adjunto", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 404
+
+
+def test_descargar_adjunto_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.get(
+        f"/projects/{created['crp_code']}/checklist/1/adjunto", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "El ítem no tiene un adjunto"

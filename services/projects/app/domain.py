@@ -49,3 +49,45 @@ def editable_modules(role: Rol) -> set[Modulo]:
     cambia qué secciones puede editar cada uno (hoy es informativo: el
     formulario de edición por módulo pertenece a historias futuras)."""
     return ROLE_MODULE_ACCESS.get(role, set())
+
+
+# E4-H1: checklist documental de importación (solo aplica a proyectos GM;
+# los STMB/STIN van directo a Técnico, restricción de E4-H3).
+class TipoItemChecklist(str, Enum):
+    REQUERIDO = "REQUERIDO"
+    OPCIONAL = "OPCIONAL"
+
+
+class EstadoItemChecklist(str, Enum):
+    PENDIENTE = "PENDIENTE"
+    ARCHIVADO = "ARCHIVADO"
+    NO_APLICA = "NO_APLICA"
+
+
+# (número de referencia, nombre, tipo) en el orden del checklist oficial.
+CHECKLIST_ITEMS: list[tuple[str, str, TipoItemChecklist]] = [
+    ("1", "Detalle de Plano", TipoItemChecklist.REQUERIDO),
+    ("2", "Planos / OT", TipoItemChecklist.REQUERIDO),
+    ("3", "Proforma / Factura", TipoItemChecklist.REQUERIDO),
+    ("4", "SWIFT", TipoItemChecklist.REQUERIDO),
+    ("5", "DC", TipoItemChecklist.REQUERIDO),
+    ("6", "LIQ", TipoItemChecklist.REQUERIDO),
+    ("7", "Lista de Empaque", TipoItemChecklist.REQUERIDO),
+    ("8", "HAWBL / BL", TipoItemChecklist.REQUERIDO),
+    ("9", "DIM 500", TipoItemChecklist.REQUERIDO),
+    ("10", "Aclaración y Complemento", TipoItemChecklist.REQUERIDO),
+    ("11", "MDS", TipoItemChecklist.OPCIONAL),
+    ("11.1", "Cert. EUR1", TipoItemChecklist.OPCIONAL),
+    ("11.2", "Cert. Seguro", TipoItemChecklist.OPCIONAL),
+    ("12", "Cotización Flete Internacional", TipoItemChecklist.REQUERIDO),
+]
+
+# E4-H2: al archivar este ítem se dispara la notificación de Anticipo 2.
+NUMERO_ITEM_BL = "8"
+
+
+def can_edit_checklist(role: Rol) -> bool:
+    """Restricción E4-H1: solo el rol Importaciones (y Gerencia, con el
+    mismo criterio usado en el resto de la plataforma) puede cambiar los
+    estados del checklist."""
+    return role in (Rol.IMPORTACIONES, Rol.GERENCIA)
