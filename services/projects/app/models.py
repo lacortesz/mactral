@@ -147,6 +147,23 @@ class Notificacion(Base):
     project: Mapped["Project"] = relationship()
 
 
+class Comentario(Base):
+    """E9-H3: comentarios por proyecto, con menciones @usuario (texto libre;
+    la mención se detecta al leer, no requiere un directorio de usuarios en
+    este servicio)."""
+
+    __tablename__ = "comentarios"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    autor_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    autor_nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    mensaje: Mapped[str] = mapped_column(Text(), nullable=False)
+    fecha: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+
+    project: Mapped["Project"] = relationship()
+
+
 class ImportChecklistItem(Base):
     """E4-H1: checklist documental de importación (solo proyectos GM)."""
 

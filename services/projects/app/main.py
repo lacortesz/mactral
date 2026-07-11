@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import financiero, logistica, notificaciones, projects
+from app.routers import comentarios, financiero, logistica, notificaciones, projects
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -25,6 +25,7 @@ app.include_router(financiero.cxp_router)
 app.include_router(financiero.anticipo1_router)
 app.include_router(logistica.router)
 app.include_router(notificaciones.router)
+app.include_router(comentarios.router)
 
 
 @app.get("/health")

@@ -855,3 +855,46 @@ def test_marcar_notificacion_inexistente_devuelve_404_via_api(client):
     token = _token("IMPORTACIONES")
     response = client.patch("/notificaciones/no-existe/leer", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404
+
+
+def test_crear_y_listar_comentarios_via_api(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/comentarios",
+        json={"mensaje": "Revisar con @importaciones antes del viernes"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["autor_nombre"] == "Maya Lozada"
+    assert body["menciones"] == ["importaciones"]
+
+    listado = client.get(
+        f"/projects/{created['crp_code']}/comentarios", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert listado.status_code == 200
+    assert len(listado.json()) == 1
+
+
+def test_crear_comentario_vacio_devuelve_422(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/comentarios",
+        json={"mensaje": "   "},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+
+
+def test_listar_comentarios_de_proyecto_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    response = client.get("/projects/NO-EXISTE/comentarios", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 404
