@@ -898,3 +898,24 @@ def test_listar_comentarios_de_proyecto_inexistente_devuelve_404(client):
     token = _token("COMERCIAL")
     response = client.get("/projects/NO-EXISTE/comentarios", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404
+
+
+def test_dashboard_global_via_api(client):
+    token = _token("COMERCIAL")
+    response = client.get("/reportes/dashboard", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_activos"] >= 1
+    assert len(body["por_semaforo"]) == 3
+
+
+def test_rentabilidad_solo_gerencia_via_api(client):
+    token = _token("GERENCIA")
+    response = client.get("/reportes/rentabilidad", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+
+
+def test_rentabilidad_otro_rol_devuelve_403_via_api(client):
+    token = _token("ADMINISTRATIVO")
+    response = client.get("/reportes/rentabilidad", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403
