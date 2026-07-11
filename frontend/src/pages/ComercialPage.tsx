@@ -1,14 +1,16 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, comercialApiFetch } from "../api/client";
+import { ApiError, comercialApiFetch, comercialFetchBlob } from "../api/client";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../context/AuthContext";
 import {
   CANAL_ENTRADA_OPTIONS,
   ESTADO_LEAD_LABELS,
   LINE_LABELS,
+  TIPO_PAGO_LABELS,
   type EstadoLead,
   type LineaNegocio,
+  type TipoPago,
 } from "../domain";
 
 type LeadListItem = {
@@ -30,6 +32,18 @@ type Interaction = {
   usuario_nombre: string;
 };
 
+type Quotation = {
+  version: number;
+  numero_cotizacion: string;
+  valor_equipo: number;
+  tipo_pago: TipoPago;
+  anticipo_inicial_pct: number;
+  segundo_anticipo_pct: number;
+  saldo_final_pct: number;
+  fecha_estimada_entrega: string;
+  created_at: string;
+};
+
 type LeadDetail = LeadListItem & {
   telefono: string | null;
   correo: string | null;
@@ -37,6 +51,16 @@ type LeadDetail = LeadListItem & {
   marca: string;
   vendedor_id: string;
   interacciones: Interaction[];
+  cotizaciones: Quotation[];
+};
+
+const EMPTY_QUOTATION_FORM = {
+  valor_equipo: "",
+  tipo_pago: "CONTADO" as TipoPago,
+  anticipo_inicial_pct: "50",
+  segundo_anticipo_pct: "30",
+  saldo_final_pct: "20",
+  fecha_estimada_entrega: "",
 };
 
 const EMPTY_FORM = {
@@ -73,6 +97,10 @@ export default function ComercialPage() {
     resumen: "",
   });
   const [interactionError, setInteractionError] = useState<string | null>(null);
+
+  const [quotationForm, setQuotationForm] = useState(EMPTY_QUOTATION_FORM);
+  const [quotationError, setQuotationError] = useState<string | null>(null);
+  const [generatingQuotation, setGeneratingQuotation] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -130,6 +158,48 @@ export default function ComercialPage() {
       setInteractionForm({ canal: CANAL_ENTRADA_OPTIONS[0], resumen: "" });
     } catch (err) {
       setInteractionError(err instanceof ApiError ? err.message : "No se pudo agregar la nota");
+    }
+  }
+
+  async function handleGenerateQuotation(event: FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    setQuotationError(null);
+    setGeneratingQuotation(true);
+    try {
+      await comercialApiFetch(`/leads/${selected.id}/quotations`, {
+        method: "POST",
+        token,
+        body: {
+          valor_equipo: Number(quotationForm.valor_equipo),
+          tipo_pago: quotationForm.tipo_pago,
+          anticipo_inicial_pct: Number(quotationForm.anticipo_inicial_pct),
+          segundo_anticipo_pct: Number(quotationForm.segundo_anticipo_pct),
+          saldo_final_pct: Number(quotationForm.saldo_final_pct),
+          fecha_estimada_entrega: quotationForm.fecha_estimada_entrega,
+        },
+      });
+      const refreshed = await comercialApiFetch<LeadDetail>(`/leads/${selected.id}`, { token });
+      setSelected(refreshed);
+      setLeads((prev) => prev.map((l) => (l.id === refreshed.id ? { ...l, estado: refreshed.estado } : l)));
+    } catch (err) {
+      setQuotationError(err instanceof ApiError ? err.message : "No se pudo generar la cotización");
+    } finally {
+      setGeneratingQuotation(false);
+    }
+  }
+
+  async function viewQuotationPdf(leadId: string, version: number) {
+    // La pestaña debe abrirse de forma síncrona con el clic: si se abre
+    // después del await, Chromium pierde el "user gesture" y bloquea el popup.
+    const tab = window.open("", "_blank");
+    try {
+      const blob = await comercialFetchBlob(`/leads/${leadId}/quotations/${version}/pdf`, token);
+      const url = URL.createObjectURL(blob);
+      if (tab) tab.location.href = url;
+    } catch (err) {
+      tab?.close();
+      setQuotationError(err instanceof ApiError ? err.message : "No se pudo abrir el PDF");
     }
   }
 
@@ -293,47 +363,194 @@ export default function ComercialPage() {
       </div>
 
       {selected && (
-        <div className="card">
-          <h2 className="card-title">
-            {selected.codigo} · {selected.nombre}
-          </h2>
-          {interactionError && <div className="alert alert-error">{interactionError}</div>}
+        <>
+          <div className="card">
+            <h2 className="card-title">
+              {selected.codigo} · {selected.nombre}
+            </h2>
+            {interactionError && <div className="alert alert-error">{interactionError}</div>}
 
-          <ul style={{ listStyle: "none", margin: "0 0 16px", padding: 0, fontSize: 13 }}>
-            {selected.interacciones.length === 0 && (
-              <li style={{ color: "var(--mactral-text-muted)" }}>Sin interacciones registradas.</li>
-            )}
-            {selected.interacciones.map((i, idx) => (
-              <li key={idx} style={{ padding: "8px 0", borderBottom: "1px solid var(--mactral-border)" }}>
-                <strong>{new Date(i.fecha).toLocaleString("es-CO")}</strong>{" "}
-                <span className="badge badge-role">{i.canal}</span> — {i.resumen}{" "}
-                <span style={{ color: "var(--mactral-text-muted)" }}>({i.usuario_nombre})</span>
-              </li>
-            ))}
-          </ul>
-
-          <form onSubmit={handleAddInteraction} style={{ display: "flex", gap: 10 }}>
-            <select
-              value={interactionForm.canal}
-              onChange={(e) => setInteractionForm({ ...interactionForm, canal: e.target.value })}
-            >
-              {CANAL_ENTRADA_OPTIONS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
+            <ul style={{ listStyle: "none", margin: "0 0 16px", padding: 0, fontSize: 13 }}>
+              {selected.interacciones.length === 0 && (
+                <li style={{ color: "var(--mactral-text-muted)" }}>Sin interacciones registradas.</li>
+              )}
+              {selected.interacciones.map((i, idx) => (
+                <li key={idx} style={{ padding: "8px 0", borderBottom: "1px solid var(--mactral-border)" }}>
+                  <strong>{new Date(i.fecha).toLocaleString("es-CO")}</strong>{" "}
+                  <span className="badge badge-role">{i.canal}</span> — {i.resumen}{" "}
+                  <span style={{ color: "var(--mactral-text-muted)" }}>({i.usuario_nombre})</span>
+                </li>
               ))}
-            </select>
-            <input
-              style={{ flex: 1, border: "1px solid var(--mactral-border)", borderRadius: 6, padding: "9px 10px" }}
-              placeholder="Resumen de la interacción..."
-              value={interactionForm.resumen}
-              onChange={(e) => setInteractionForm({ ...interactionForm, resumen: e.target.value })}
-            />
-            <button type="submit" className="btn-primary">
-              Agregar nota
-            </button>
-          </form>
-        </div>
+            </ul>
+
+            <form onSubmit={handleAddInteraction} style={{ display: "flex", gap: 10 }}>
+              <select
+                value={interactionForm.canal}
+                onChange={(e) => setInteractionForm({ ...interactionForm, canal: e.target.value })}
+              >
+                {CANAL_ENTRADA_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <input
+                style={{ flex: 1, border: "1px solid var(--mactral-border)", borderRadius: 6, padding: "9px 10px" }}
+                placeholder="Resumen de la interacción..."
+                value={interactionForm.resumen}
+                onChange={(e) => setInteractionForm({ ...interactionForm, resumen: e.target.value })}
+              />
+              <button type="submit" className="btn-primary">
+                Agregar nota
+              </button>
+            </form>
+          </div>
+
+          <div className="card">
+            <h2 className="card-title">Cotización</h2>
+            {quotationError && <div className="alert alert-error">{quotationError}</div>}
+
+            {selected.cotizaciones.length > 0 && (
+              <table style={{ marginBottom: 16 }}>
+                <thead>
+                  <tr>
+                    <th>N° cotización</th>
+                    <th>Valor equipo</th>
+                    <th>Tipo de pago</th>
+                    <th>Entrega estimada</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.cotizaciones.map((q) => (
+                    <tr key={q.version}>
+                      <td>{q.numero_cotizacion}</td>
+                      <td>${q.valor_equipo.toLocaleString("es-CO")}</td>
+                      <td>{TIPO_PAGO_LABELS[q.tipo_pago]}</td>
+                      <td>{new Date(q.fecha_estimada_entrega).toLocaleDateString("es-CO")}</td>
+                      <td>
+                        <button className="btn-link" onClick={() => viewQuotationPdf(selected.id, q.version)}>
+                          Vista previa
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <form onSubmit={handleGenerateQuotation}>
+              <div className="form-grid">
+                <div className="form-field">
+                  <label htmlFor="valor_equipo">Valor del equipo (COP)</label>
+                  <input
+                    id="valor_equipo"
+                    type="number"
+                    min={1}
+                    value={quotationForm.valor_equipo}
+                    onChange={(e) => setQuotationForm({ ...quotationForm, valor_equipo: e.target.value })}
+                  />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="tipo_pago">Tipo de pago</label>
+                  <select
+                    id="tipo_pago"
+                    value={quotationForm.tipo_pago}
+                    onChange={(e) =>
+                      setQuotationForm({ ...quotationForm, tipo_pago: e.target.value as TipoPago })
+                    }
+                  >
+                    <option value="CONTADO">{TIPO_PAGO_LABELS.CONTADO}</option>
+                    <option value="CREDITO">{TIPO_PAGO_LABELS.CREDITO}</option>
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label htmlFor="fecha_estimada_entrega">Fecha estimada de entrega</label>
+                  <input
+                    id="fecha_estimada_entrega"
+                    type="date"
+                    value={quotationForm.fecha_estimada_entrega}
+                    onChange={(e) =>
+                      setQuotationForm({ ...quotationForm, fecha_estimada_entrega: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="anticipo_inicial_pct">Anticipo inicial (%)</label>
+                  <input
+                    id="anticipo_inicial_pct"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={quotationForm.anticipo_inicial_pct}
+                    onChange={(e) =>
+                      setQuotationForm({ ...quotationForm, anticipo_inicial_pct: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="segundo_anticipo_pct">2do anticipo (%)</label>
+                  <input
+                    id="segundo_anticipo_pct"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={quotationForm.segundo_anticipo_pct}
+                    onChange={(e) =>
+                      setQuotationForm({ ...quotationForm, segundo_anticipo_pct: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="saldo_final_pct">Saldo final (%)</label>
+                  <input
+                    id="saldo_final_pct"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={quotationForm.saldo_final_pct}
+                    onChange={(e) => setQuotationForm({ ...quotationForm, saldo_final_pct: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {(() => {
+                const valor = Number(quotationForm.valor_equipo) || 0;
+                const pct1 = Number(quotationForm.anticipo_inicial_pct) || 0;
+                const pct2 = Number(quotationForm.segundo_anticipo_pct) || 0;
+                const pct3 = Number(quotationForm.saldo_final_pct) || 0;
+                const total = pct1 + pct2 + pct3;
+                return (
+                  <div style={{ marginTop: 16, fontSize: 13 }}>
+                    <div>
+                      Anticipo 1 ({pct1}%): ${Math.round((valor * pct1) / 100).toLocaleString("es-CO")}
+                    </div>
+                    <div>
+                      Anticipo 2 ({pct2}%): ${Math.round((valor * pct2) / 100).toLocaleString("es-CO")}
+                    </div>
+                    <div>
+                      Saldo final ({pct3}%): ${Math.round((valor * pct3) / 100).toLocaleString("es-CO")}
+                    </div>
+                    <div style={{ fontWeight: 700 }}>Total contrato: ${valor.toLocaleString("es-CO")}</div>
+                    {total !== 100 && (
+                      <div style={{ color: "var(--mactral-red)", marginTop: 4 }}>
+                        Los porcentajes suman {total}%, deben sumar 100%.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <button type="submit" className="btn-primary" style={{ marginTop: 16 }} disabled={generatingQuotation}>
+                {generatingQuotation
+                  ? "Generando..."
+                  : selected.cotizaciones.length > 0
+                    ? "Regenerar cotización"
+                    : "Generar cotización PDF"}
+              </button>
+            </form>
+          </div>
+        </>
       )}
     </AppShell>
   );

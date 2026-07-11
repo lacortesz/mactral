@@ -1,11 +1,21 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum as SAEnum,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.domain import EstadoLead, LineaNegocio
+from app.domain import EstadoLead, LineaNegocio, TipoPago
 
 
 def _values(enum_cls):
@@ -46,6 +56,9 @@ class Lead(Base):
     interacciones: Mapped[list["LeadInteraction"]] = relationship(
         back_populates="lead", cascade="all, delete-orphan", order_by="LeadInteraction.fecha"
     )
+    cotizaciones: Mapped[list["Quotation"]] = relationship(
+        back_populates="lead", cascade="all, delete-orphan", order_by="Quotation.version"
+    )
 
 
 class LeadInteraction(Base):
@@ -77,3 +90,35 @@ class LeadCounter(Base):
     )
     anio: Mapped[int] = mapped_column(Integer, nullable=False)
     ultimo_valor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class Quotation(Base):
+    """E2-H2: cotización en PDF. Cada regeneración crea una versión nueva;
+    las anteriores se conservan como historial (no se sobrescriben)."""
+
+    __tablename__ = "quotations"
+    __table_args__ = (UniqueConstraint("lead_id", "version", name="uq_quotation_version"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    lead_id: Mapped[str] = mapped_column(ForeignKey("leads.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    valor_equipo: Mapped[int] = mapped_column(Integer, nullable=False)
+    tipo_pago: Mapped[TipoPago] = mapped_column(
+        SAEnum(TipoPago, name="tipo_pago", values_callable=_values), nullable=False
+    )
+    anticipo_inicial_pct: Mapped[int] = mapped_column(Integer, nullable=False)
+    segundo_anticipo_pct: Mapped[int] = mapped_column(Integer, nullable=False)
+    saldo_final_pct: Mapped[int] = mapped_column(Integer, nullable=False)
+    fecha_estimada_entrega: Mapped[date] = mapped_column(Date(), nullable=False)
+
+    pdf_bytes: Mapped[bytes] = mapped_column(LargeBinary(), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+
+    lead: Mapped["Lead"] = relationship(back_populates="cotizaciones")
+
+    @property
+    def numero_cotizacion(self) -> str:
+        # Restricción E2-H2: el número de cotización es el consecutivo del lead.
+        return f"{self.lead.codigo}-v{self.version}"

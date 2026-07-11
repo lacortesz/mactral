@@ -61,6 +61,12 @@ def get_lead_detail(db: Session, lead_id: str) -> Lead:
     return lead
 
 
+def can_edit_lead(actor: Actor, lead: Lead) -> bool:
+    """Restricción E2-H1: solo el vendedor asignado y Gerencia pueden
+    editar el lead (interacciones, cotizaciones, cambios de estado)."""
+    return actor.role == Rol.GERENCIA or actor.id == lead.vendedor_id
+
+
 def create_lead(db: Session, actor: Actor, data: LeadCreate) -> Lead:
     if not can_manage_leads(actor.role):
         raise ForbiddenError("Solo el vendedor (Comercial) o Gerencia pueden registrar leads.")
@@ -92,8 +98,7 @@ def add_interaction(
 ) -> LeadInteraction:
     lead = get_lead_detail(db, lead_id)
 
-    # Restricción E2-H1: solo el vendedor asignado y Gerencia pueden editar el lead.
-    if actor.role != Rol.GERENCIA and actor.id != lead.vendedor_id:
+    if not can_edit_lead(actor, lead):
         raise ForbiddenError("Solo el vendedor asignado o Gerencia pueden editar este lead.")
 
     interaction = LeadInteraction(

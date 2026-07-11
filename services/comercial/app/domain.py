@@ -26,9 +26,21 @@ class EstadoLead(str, Enum):
     VENDIDO = "VENDIDO"
 
 
+class TipoPago(str, Enum):
+    CONTADO = "CONTADO"
+    CREDITO = "CREDITO"
+
+
 LEAD_CODE_PREFIX: dict[LineaNegocio, str] = {
     LineaNegocio.MOBILITY: "MOB",
     LineaNegocio.INDUSTRY: "IND",
+}
+
+# E2-H3: transiciones válidas del estado del lead. Son secuenciales y no
+# reversibles una vez avanzados (sin retrocesos ni saltos).
+ESTADO_SIGUIENTE: dict[EstadoLead, EstadoLead] = {
+    EstadoLead.COTIZAR: EstadoLead.ENVIADA,
+    EstadoLead.ENVIADA: EstadoLead.VENDIDO,
 }
 
 

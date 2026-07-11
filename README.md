@@ -16,6 +16,11 @@ Implementa:
 - **E2-H1 — Registro de lead**: alta de leads con datos de contacto y equipo
   solicitado, consecutivo automático por línea de negocio (MOB/IND), y
   registro de interacciones posteriores.
+- **E2-H2 — Cotización en PDF con calculadora oficial**: generación de una
+  cotización en PDF (valor del equipo, tipo de pago, % de anticipos, fecha
+  estimada de entrega) adjunta al lead con numeración basada en su
+  consecutivo; el estado cambia automáticamente a Enviada la primera vez, y
+  cada regeneración crea una nueva versión conservando el historial completo.
 
 Ver `HU_AC_Mockups_GrupoMactral_v1_optimizado.pdf` (32 historias, 11 épicas)
 para las historias de usuario originales.
@@ -25,7 +30,7 @@ para las historias de usuario originales.
 ```
 services/auth/        FastAPI + SQLAlchemy + Alembic (usuarios, roles, sesión)
 services/projects/    FastAPI + SQLAlchemy + Alembic (ficha CRP, E1-H3)
-services/comercial/   FastAPI + SQLAlchemy + Alembic (leads, E2-H1)
+services/comercial/   FastAPI + SQLAlchemy + Alembic (leads, E2-H1/E2-H2)
 frontend/             React + Vite + TypeScript (SPA)
 docker-compose.yml
 ```
@@ -307,6 +312,27 @@ ahí no hay una restricción real, así que los tests unitarios no lo atrapan).
 - Frontend: página dedicada del módulo Comercial
   (`frontend/src/pages/ComercialPage.tsx`) con KPIs por estado, listado,
   formulario de alta y panel de interacciones por lead.
+
+### E2-H2
+- Generación de cotización (`POST /leads/{id}/quotations`,
+  `services/comercial/app/services/quotation_service.py`) → PDF construido
+  con `reportlab` (`app/pdf.py`), guardado como `LargeBinary` directamente en
+  Postgres (no en el filesystem, para portabilidad en Railway), adjunto al
+  lead; si el lead estaba en `COTIZAR` el estado cambia a `ENVIADA` (solo la
+  primera vez, no en regeneraciones posteriores).
+- Calculadora oficial: la API valida que `anticipo_inicial_pct +
+  segundo_anticipo_pct + saldo_final_pct == 100` y que `valor_equipo > 0`
+  (`app/schemas.py`, `QuotationCreate`); no admite texto libre.
+- Regeneración (`POST` repetido sobre el mismo lead) → incrementa la versión
+  (`v1`, `v2`, ...) conservando las versiones anteriores en el historial;
+  número de cotización = `{código del lead}-v{versión}`.
+- Descarga del PDF (`GET /leads/{id}/quotations/{version}/pdf`); solo el
+  vendedor asignado o Gerencia pueden generar/ver cotizaciones (mismo
+  `can_edit_lead` de E2-H1).
+- Frontend: tarjeta "Cotización" en `ComercialPage.tsx` con formulario,
+  desglose en vivo, historial de versiones y botón "Vista previa" que abre el
+  PDF en una pestaña nueva (usando `comercialFetchBlob` porque un `<a href>`
+  normal no puede enviar el header `Authorization`).
 
 ## Notas de la migración de stack
 
