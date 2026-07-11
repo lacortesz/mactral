@@ -1,10 +1,11 @@
-"""E7-H1: definición de cuotas y anticipos por proyecto."""
-from datetime import date
+"""E7-H1/E7-H2: cuotas, anticipos y tablero financiero por proyecto."""
+from datetime import date, timedelta
 
 import pytest
 from pydantic import ValidationError
 
-from app.domain import Modulo, Rol
+from app.domain import Modulo, Rol, TipoGastoLogistico
+from app.models import CuentaPorPagar
 from app.schemas import CuotaIn, CuotaPagoCreate, CuotasConfigCreate, ModuleStatusIn, ProjectCreate
 from app.services import financiero_service, project_service
 
@@ -151,3 +152,92 @@ def test_otro_rol_no_puede_registrar_pago(db_session):
         financiero_service.registrar_pago(
             db_session, OTRO_ROL, project.crp_code, 1, CuotaPagoCreate(fecha_pago=date(2026, 7, 30), monto_pagado=1)
         )
+
+
+# E7-H2: tablero financiero.
+def test_tablero_financiero_sin_cuotas_configuradas(db_session):
+    project = _make_project(db_session)
+
+    tablero = financiero_service.get_tablero(db_session, project.crp_code)
+
+    assert tablero.valor_contrato is None
+    assert tablero.margen_bruto is None
+    assert tablero.semaforo_pago.value == "VERDE"
+    assert tablero.cuotas == []
+    assert {t.moneda for t in tablero.tasas_cambio} == {"USD", "EUR", "GBP", "CNY"}
+
+
+def test_tablero_financiero_calcula_cobrado_y_por_cobrar(db_session):
+    project = _make_project(db_session)
+    financiero_service.configurar_cuotas(db_session, ADMIN_FINANCIERO, project.crp_code, CUOTAS_VALIDAS)
+    financiero_service.registrar_pago(
+        db_session,
+        ADMIN_FINANCIERO,
+        project.crp_code,
+        1,
+        CuotaPagoCreate(fecha_pago=date(2026, 7, 30), monto_pagado=22_500_000),
+    )
+
+    tablero = financiero_service.get_tablero(db_session, project.crp_code)
+
+    assert tablero.total_cobrado == 22_500_000
+    assert tablero.total_por_cobrar == 13_500_000 + 9_000_000
+    assert tablero.valor_contrato == 45_000_000
+
+
+def test_tablero_financiero_incluye_gastos_logisticos_en_el_margen(db_session):
+    project = _make_project(db_session)
+    financiero_service.configurar_cuotas(db_session, ADMIN_FINANCIERO, project.crp_code, CUOTAS_VALIDAS)
+    db_session.add(
+        CuentaPorPagar(
+            project_id=project.id,
+            tipo=TipoGastoLogistico.VUELO,
+            proveedor="Avianca",
+            concepto="Tiquetes instalación",
+            monto=1_500_000,
+            fecha_vencimiento=date(2026, 8, 5),
+        )
+    )
+    db_session.commit()
+
+    tablero = financiero_service.get_tablero(db_session, project.crp_code)
+
+    assert tablero.total_gastos_logisticos_cop == 1_500_000
+    assert tablero.margen_bruto == 45_000_000 - 12_500_000 - 1_500_000
+
+
+def test_tablero_financiero_semaforo_rojo_por_cuota_vencida(db_session):
+    project = _make_project(db_session)
+    vencidas = CuotasConfigCreate(
+        valor_contrato=10_000,
+        cuotas=[CuotaIn(numero=1, etiqueta="Anticipo 1", monto=10_000, porcentaje=100, fecha_vencimiento=date(2020, 1, 1))],
+    )
+    financiero_service.configurar_cuotas(db_session, ADMIN_FINANCIERO, project.crp_code, vencidas)
+
+    tablero = financiero_service.get_tablero(db_session, project.crp_code)
+    assert tablero.semaforo_pago.value == "ROJO"
+
+
+def test_tablero_financiero_semaforo_amarillo_por_cuota_proxima(db_session):
+    project = _make_project(db_session)
+    proxima = CuotasConfigCreate(
+        valor_contrato=10_000,
+        cuotas=[
+            CuotaIn(
+                numero=1,
+                etiqueta="Anticipo 1",
+                monto=10_000,
+                porcentaje=100,
+                fecha_vencimiento=date.today() + timedelta(days=3),
+            )
+        ],
+    )
+    financiero_service.configurar_cuotas(db_session, ADMIN_FINANCIERO, project.crp_code, proxima)
+
+    tablero = financiero_service.get_tablero(db_session, project.crp_code)
+    assert tablero.semaforo_pago.value == "AMARILLO"
+
+
+def test_tablero_financiero_de_proyecto_inexistente_lanza_error(db_session):
+    with pytest.raises(project_service.ProjectNotFoundError):
+        financiero_service.get_tablero(db_session, "GM26-999")

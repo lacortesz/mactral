@@ -20,6 +20,7 @@ app.add_middleware(
 
 app.include_router(projects.router)
 app.include_router(financiero.router)
+app.include_router(financiero.tablero_router)
 
 
 @app.get("/health")

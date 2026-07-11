@@ -28,6 +28,31 @@ type ProjectDetail = {
   cliente: string;
 };
 
+type TasaCambio = { moneda: string; tasa_cop: number };
+
+type Tablero = {
+  valor_contrato: number | null;
+  costo_fabricacion: number;
+  total_cobrado: number;
+  total_por_cobrar: number;
+  total_gastos_logisticos_cop: number;
+  margen_bruto: number | null;
+  semaforo_pago: "VERDE" | "AMARILLO" | "ROJO";
+  tasas_cambio: TasaCambio[];
+};
+
+const SEMAFORO_LABELS: Record<Tablero["semaforo_pago"], string> = {
+  VERDE: "Al día",
+  AMARILLO: "Por vencer",
+  ROJO: "Vencida",
+};
+
+const SEMAFORO_CLASSES: Record<Tablero["semaforo_pago"], string> = {
+  VERDE: "badge-status-activo",
+  AMARILLO: "badge-role",
+  ROJO: "badge-status-inactivo",
+};
+
 const EMPTY_CUOTA = { etiqueta: "", monto: "", porcentaje: "", fecha_vencimiento: "" };
 
 export default function FinancieroPage() {
@@ -44,6 +69,7 @@ export default function FinancieroPage() {
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [selected, setSelected] = useState<ProjectDetail | null>(null);
   const [cuotas, setCuotas] = useState<Cuota[] | null>(null);
+  const [tablero, setTablero] = useState<Tablero | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [valorContrato, setValorContrato] = useState("");
@@ -62,6 +88,7 @@ export default function FinancieroPage() {
     setError(null);
     setSelected(null);
     setCuotas(null);
+    setTablero(null);
     try {
       const found = await projectsApiFetch<SearchResult[]>(
         `/projects/search?q=${encodeURIComponent(query)}`,
@@ -82,6 +109,11 @@ export default function FinancieroPage() {
         method: "GET",
       }).catch(() => null);
       setCuotas(found);
+      const tableroFound = await projectsApiFetch<Tablero>(
+        `/projects/${encodeURIComponent(crpCode)}/tablero-financiero`,
+        { token, method: "GET" }
+      ).catch(() => null);
+      setTablero(tableroFound);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cargar el tablero financiero");
     }
@@ -110,6 +142,11 @@ export default function FinancieroPage() {
         },
       });
       setCuotas(created);
+      const tableroFound = await projectsApiFetch<Tablero>(
+        `/projects/${encodeURIComponent(selected.crp_code)}/tablero-financiero`,
+        { token }
+      ).catch(() => null);
+      setTablero(tableroFound);
     } catch (err) {
       setConfigError(err instanceof ApiError ? err.message : "No se pudo configurar el esquema de pagos");
     } finally {
@@ -136,6 +173,11 @@ export default function FinancieroPage() {
         token,
       });
       setCuotas(found);
+      const tableroFound = await projectsApiFetch<Tablero>(
+        `/projects/${encodeURIComponent(selected.crp_code)}/tablero-financiero`,
+        { token }
+      ).catch(() => null);
+      setTablero(tableroFound);
     } catch (err) {
       setPagoError(err instanceof ApiError ? err.message : "No se pudo registrar el pago");
     } finally {
@@ -303,7 +345,44 @@ export default function FinancieroPage() {
                   <div style={{ fontSize: 12, color: "var(--mactral-text-muted)" }}>Por cobrar</div>
                   <div style={{ fontSize: 22, fontWeight: 700 }}>${totalPendiente.toLocaleString("es-CO")}</div>
                 </div>
+                {tablero && (
+                  <>
+                    <div>
+                      <div style={{ fontSize: 12, color: "var(--mactral-text-muted)" }}>Gastos logísticos (COP)</div>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>
+                        ${tablero.total_gastos_logisticos_cop.toLocaleString("es-CO")}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, color: "var(--mactral-text-muted)" }}>Margen bruto</div>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>
+                        {tablero.margen_bruto !== null ? `$${tablero.margen_bruto.toLocaleString("es-CO")}` : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, color: "var(--mactral-text-muted)" }}>Semáforo de pago</div>
+                      <span className={`badge ${SEMAFORO_CLASSES[tablero.semaforo_pago]}`}>
+                        {SEMAFORO_LABELS[tablero.semaforo_pago]}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
+
+              {tablero && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 12, color: "var(--mactral-text-muted)", marginBottom: 6 }}>
+                    Tasas de cambio de referencia (a COP)
+                  </div>
+                  <div style={{ display: "flex", gap: 16 }}>
+                    {tablero.tasas_cambio.map((t) => (
+                      <div key={t.moneda} style={{ fontSize: 13 }}>
+                        <strong>{t.moneda}</strong> ${t.tasa_cop.toLocaleString("es-CO")}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {pagoError && <div className="alert alert-error">{pagoError}</div>}
 

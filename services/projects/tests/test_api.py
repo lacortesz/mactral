@@ -623,3 +623,31 @@ def test_otro_rol_no_puede_configurar_cuotas_via_api(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
+
+
+def test_tablero_financiero_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/projects/{created['crp_code']}/cuotas",
+        json=CUOTAS_CONFIG_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+
+    response = client.get(
+        f"/projects/{created['crp_code']}/tablero-financiero", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["valor_contrato"] == 45_000_000
+    assert body["total_por_cobrar"] == 45_000_000
+    assert len(body["tasas_cambio"]) == 4
+
+
+def test_tablero_financiero_de_proyecto_inexistente_devuelve_404_via_api(client):
+    token = _token("COMERCIAL")
+    response = client.get("/projects/NO-EXISTE/tablero-financiero", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 404
