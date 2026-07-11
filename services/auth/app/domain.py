@@ -34,6 +34,7 @@ class Modulo(str, Enum):
     TECNICO = "tecnico"
     STOCK = "stock"
     FINANCIERO = "financiero"
+    LOGISTICA = "logistica"
     ADMINISTRACION = "administracion"
 
 
@@ -44,9 +45,10 @@ ROLE_MODULE_ACCESS: dict[Rol, set[Modulo]] = {
     Rol.COMERCIAL: {Modulo.COMERCIAL, Modulo.REG_MAESTRO, Modulo.STOCK},
     Rol.IMPORTACIONES: {Modulo.IMPORTACIONES, Modulo.REG_MAESTRO},
     Rol.TECNICO: {Modulo.TECNICO, Modulo.STOCK, Modulo.REG_MAESTRO},
-    # E6-H1: "Bodega" no es un rol propio de la plataforma (E1-H1 fija los
-    # roles); se mapea a Administrativo, que además ya administra Financiero.
-    Rol.ADMINISTRATIVO: {Modulo.FINANCIERO, Modulo.REG_MAESTRO, Modulo.STOCK},
+    # E6-H1/E8-H1: "Bodega"/"Logística" no son roles propios de la plataforma
+    # (E1-H1 fija los roles); se mapean a Administrativo, que además ya
+    # administra Financiero.
+    Rol.ADMINISTRATIVO: {Modulo.FINANCIERO, Modulo.REG_MAESTRO, Modulo.STOCK, Modulo.LOGISTICA},
 }
 
 

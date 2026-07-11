@@ -29,11 +29,11 @@ def test_tecnico_accede_a_tecnico_y_stock():
     assert can_access_module(Rol.TECNICO, Modulo.STOCK) is True
 
 
-def test_administrativo_accede_a_financiero_stock_y_reg_maestro():
-    # E6-H1: "Bodega" se mapea al rol Administrativo (la plataforma no
-    # tiene un rol propio de bodega).
+def test_administrativo_accede_a_financiero_stock_logistica_y_reg_maestro():
+    # E6-H1/E8-H1: "Bodega"/"Logística" se mapean al rol Administrativo (la
+    # plataforma no tiene roles propios para ellos).
     accesibles = set(accessible_modules(Rol.ADMINISTRATIVO))
-    assert accesibles == {Modulo.FINANCIERO, Modulo.REG_MAESTRO, Modulo.STOCK}
+    assert accesibles == {Modulo.FINANCIERO, Modulo.REG_MAESTRO, Modulo.STOCK, Modulo.LOGISTICA}
 
 
 def test_comercial_puede_consultar_stock():

@@ -702,3 +702,85 @@ def test_confirmar_solicitud_anticipo1_sin_planos_aprobados_devuelve_422(client)
         headers={"Authorization": f"Bearer {token_admin}"},
     )
     assert response.status_code == 422
+
+
+GASTO_LOGISTICO_PAYLOAD = {
+    "tipo": "VUELO",
+    "proveedor": "Avianca",
+    "concepto": "Tiquetes técnico instalación",
+    "monto": 1_500_000,
+    "fecha_vencimiento": "2026-08-05",
+}
+
+
+def test_registrar_gasto_logistico_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=GASTO_LOGISTICO_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["proveedor"] == "Avianca"
+    assert body["crp_code"] == created["crp_code"]
+
+
+def test_listar_gastos_logisticos_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=GASTO_LOGISTICO_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+
+    response = client.get(
+        f"/projects/{created['crp_code']}/logistica", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_registrar_gasto_logistico_otro_rol_devuelve_403(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=GASTO_LOGISTICO_PAYLOAD,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
+
+
+def test_registrar_viaticos_sin_autorizacion_devuelve_422(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    payload = {**GASTO_LOGISTICO_PAYLOAD, "tipo": "VIATICOS", "autorizado_gg": False}
+    response = client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=payload,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 422
+
+
+def test_listar_gastos_logisticos_de_proyecto_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    response = client.get("/projects/NO-EXISTE/logistica", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 404
