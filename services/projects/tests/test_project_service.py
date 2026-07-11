@@ -1,9 +1,11 @@
 from datetime import datetime
 
 import pytest
+from pydantic import ValidationError
 
 from app.domain import EstadoEtapa, Modulo, Rol, SemaforoColor
 from app.models import Project, ProjectEvent, ProjectModuleStatus
+from app.schemas import ModuleStatusIn, ProjectCreate
 from app.services import project_service
 
 
@@ -132,3 +134,54 @@ def test_search_projects_sin_coincidencias_devuelve_lista_vacia(db_session):
     results = project_service.search_projects(db_session, "no-existe-este-criterio")
 
     assert results == []
+
+
+GM_PAYLOAD = ProjectCreate(
+    crp_prefix="GM",
+    tipo="GM - Importación",
+    cliente="Residencias El Pinar",
+    ciudad="Pereira",
+    producto="SSE Recta",
+    marca="Stannah",
+    modulos=[
+        ModuleStatusIn(modulo=Modulo.COMERCIAL, estado=EstadoEtapa.CERRADO),
+        ModuleStatusIn(modulo=Modulo.REG_MAESTRO, estado=EstadoEtapa.CERRADO),
+        ModuleStatusIn(modulo=Modulo.IMPORTACIONES, estado=EstadoEtapa.EN_CURSO),
+        ModuleStatusIn(modulo=Modulo.TECNICO, estado=EstadoEtapa.PENDIENTE),
+    ],
+    evento_origen="Comercial",
+    evento_mensaje="Venta cerrada · lead MOB26-018 · $45.000.000",
+)
+
+
+# Escenario 1 (E2-H4): clasificación GM crea el Registro Maestro.
+def test_create_project_genera_codigo_con_prefijo_y_anio(db_session):
+    project = project_service.create_project(db_session, GM_PAYLOAD)
+
+    assert project.crp_code.startswith("GM")
+    assert project.crp_code.endswith("-01")
+    assert len(project.module_statuses) == 4
+    assert len(project.events) == 2  # "Venta cerrada" (Comercial) + "Código generado" (Sistema)
+
+
+def test_create_project_incrementa_el_consecutivo_por_prefijo_y_anio(db_session):
+    primero = project_service.create_project(db_session, GM_PAYLOAD)
+    segundo = project_service.create_project(db_session, GM_PAYLOAD)
+
+    assert primero.crp_code != segundo.crp_code
+    assert segundo.crp_code.endswith("-02")
+
+
+def test_create_project_prefijos_distintos_llevan_contadores_independientes(db_session):
+    gm = project_service.create_project(db_session, GM_PAYLOAD)
+    stock_payload = GM_PAYLOAD.model_copy(update={"crp_prefix": "STMB", "tipo": "Stock - Mobility"})
+    stock = project_service.create_project(db_session, stock_payload)
+
+    assert gm.crp_code.startswith("GM")
+    assert stock.crp_code.startswith("STMB")
+    assert stock.crp_code.endswith("-01")
+
+
+def test_create_project_prefijo_invalido_lanza_error():
+    with pytest.raises(ValidationError, match="Prefijo inválido"):
+        ProjectCreate(**{**GM_PAYLOAD.model_dump(), "crp_prefix": "XYZ"})

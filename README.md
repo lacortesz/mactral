@@ -26,6 +26,12 @@ Implementa:
   usuario); saltar un estado (p. ej. Cotizar → Vendido) queda bloqueado con
   el mensaje "Primero cambia el estado a Enviada"; al marcar Vendido se pide
   la clasificación GM/Stock y las etapas anteriores quedan en solo lectura.
+- **E2-H4 — Clasificación GM/Stock al cerrar venta**: al confirmar la
+  clasificación, "Sistema" crea el Registro Maestro en `services/projects`
+  con un código consecutivo (`GM26-XX` / `STMB26-XX` / `STIN26-XX`); GM abre
+  el flujo completo (Importaciones), Stock reserva una unidad y va directo a
+  Técnico; sin unidades disponibles, el cierre de venta se bloquea con
+  "No hay unidades disponibles".
 
 Ver `HU_AC_Mockups_GrupoMactral_v1_optimizado.pdf` (32 historias, 11 épicas)
 para las historias de usuario originales.
@@ -355,6 +361,27 @@ ahí no hay una restricción real, así que los tests unitarios no lo atrapan).
   Vendido" (este último abre un modal para elegir la clasificación),
   historial de cambios visible en la ficha del lead, e interacciones/
   cotización pasan a solo lectura una vez el lead está `VENDIDO`.
+
+### E2-H4
+- Al confirmar la clasificación en `PATCH /leads/{id}/estado` (estado
+  `VENDIDO`), `services/comercial` reenvía el JWT del vendedor y llama a
+  `POST /projects` en `services/projects` (`app/clients/projects_client.py`)
+  para crear el Registro Maestro; el actor conceptual es "Sistema" pero
+  técnicamente actúa con la identidad de quien cerró la venta.
+- `services/projects` genera el código consecutivo por prefijo y año
+  (`GM26-XX` / `STMB26-XX` / `STIN26-XX`) con el mismo patrón de
+  `SELECT ... FOR UPDATE` que el contador de leads (`ProjectCounter`,
+  `app/services/project_service.py`), y abre los módulos según el flujo:
+  GM deja Importaciones en curso (flujo completo); Stock cierra
+  Importaciones y deja Técnico en curso (flujo corto).
+- Clasificación Stock (`STOCK_MOBILITY` / `STOCK_INDUSTRY`): antes de crear
+  el Registro Maestro, `app/services/stock_service.py` reserva una unidad de
+  `StockItem` (por línea de negocio + tipo de producto) con lock de fila; si
+  no hay unidades, el cierre de venta se bloquea con 422 "No hay unidades
+  disponibles" y ninguna mutación queda a medias (rollback explícito).
+- Frontend: el código generado (`codigo_generado`) se muestra junto a la
+  clasificación en la ficha del lead; el error de falta de stock aparece
+  dentro del modal de clasificación.
 
 ## Notas de la migración de stack
 

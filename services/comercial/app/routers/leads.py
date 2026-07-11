@@ -13,7 +13,9 @@ from app.schemas import (
     QuotationCreate,
     QuotationOut,
 )
+from app.clients.projects_client import ProjectsServiceError
 from app.services import estado_service, lead_service, quotation_service
+from app.services.stock_service import NoStockError
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -73,13 +75,17 @@ def change_estado(
     current_user: CurrentUser = Depends(require_comercial_module),
 ):
     try:
-        return estado_service.change_estado(db, current_user, lead_id, payload)
+        return estado_service.change_estado(db, current_user, lead_id, payload, current_user.raw_token)
     except lead_service.LeadNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except estado_service.ForbiddenError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except estado_service.InvalidTransitionError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except NoStockError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except ProjectsServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.post(

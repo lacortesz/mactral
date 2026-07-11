@@ -70,6 +70,9 @@ services:
       DATABASE_URL: postgresql+psycopg://mactral:mactral@postgres:5432/mactral
       JWT_SECRET: ${JWT_SECRET:-dev-secret-cambia-esto-en-produccion}
       CORS_ORIGINS: '["http://localhost:5173","http://localhost:8080"]'
+      # E2-H4: nombre del servicio en la red de Docker, no localhost (cada
+      # contenedor tiene su propio "localhost").
+      PROJECTS_SERVICE_URL: http://projects:8100
     ports:
       - "8200:8200"
     depends_on:

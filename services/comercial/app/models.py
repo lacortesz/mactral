@@ -54,6 +54,9 @@ class Lead(Base):
     clasificacion: Mapped[TipoClasificacion | None] = mapped_column(
         SAEnum(TipoClasificacion, name="tipo_clasificacion", values_callable=_values), nullable=True
     )
+    # E2-H4: código del Registro Maestro (GM26-XX/STMB26-XX/STIN26-XX)
+    # generado por services/projects al confirmar la clasificación.
+    codigo_generado: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -132,6 +135,21 @@ class Quotation(Base):
     def numero_cotizacion(self) -> str:
         # Restricción E2-H2: el número de cotización es el consecutivo del lead.
         return f"{self.lead.codigo}-v{self.version}"
+
+
+class StockItem(Base):
+    """E2-H4 (prep de Épica 6): disponibilidad de unidades por línea de
+    negocio y tipo de producto, para la clasificación Stock al cerrar venta."""
+
+    __tablename__ = "stock_items"
+    __table_args__ = (UniqueConstraint("linea_negocio", "tipo_producto", name="uq_stock_item"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    linea_negocio: Mapped[LineaNegocio] = mapped_column(
+        SAEnum(LineaNegocio, name="linea_negocio_comercial", values_callable=_values), nullable=False
+    )
+    tipo_producto: Mapped[str] = mapped_column(String(255), nullable=False)
+    cantidad_disponible: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class EstadoHistorial(Base):

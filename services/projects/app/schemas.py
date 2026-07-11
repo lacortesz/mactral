@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.domain import EstadoEtapa, Modulo, SemaforoColor
 
@@ -27,6 +27,42 @@ class TimelineEventOut(BaseModel):
     mensaje: str
 
     model_config = {"from_attributes": True}
+
+
+PREFIJOS_VALIDOS = {"GM", "STMB", "STIN"}
+
+
+class ModuleStatusIn(BaseModel):
+    modulo: Modulo
+    estado: EstadoEtapa
+
+
+class ProjectCreate(BaseModel):
+    """E2-H4: alta del Registro Maestro al clasificar un lead como Vendido.
+    services/projects no conoce las reglas de negocio de Comercial (qué
+    módulos abrir según GM/Stock): el llamador las decide y las envía."""
+
+    crp_prefix: str
+    tipo: str
+    cliente: str
+    ciudad: str
+    producto: str
+    marca: str
+    semaforo_detalle: str = "En fecha"
+    modulos: list[ModuleStatusIn]
+    evento_origen: str
+    evento_mensaje: str
+
+    @model_validator(mode="after")
+    def check_prefix(self):
+        if self.crp_prefix not in PREFIJOS_VALIDOS:
+            raise ValueError(f"Prefijo inválido: debe ser uno de {sorted(PREFIJOS_VALIDOS)}")
+        return self
+
+
+class ProjectCreateOut(BaseModel):
+    id: str
+    crp_code: str
 
 
 class ProjectDetailOut(BaseModel):

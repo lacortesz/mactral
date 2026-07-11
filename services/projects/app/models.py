@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -67,3 +67,17 @@ class ProjectEvent(Base):
     mensaje: Mapped[str] = mapped_column(Text(), nullable=False)
 
     project: Mapped["Project"] = relationship(back_populates="events")
+
+
+class ProjectCounter(Base):
+    """E2-H4: consecutivo por prefijo (GM/STMB/STIN) y año, ej. GM26-001.
+    Mismo patrón de lock de fila que LeadCounter en services/comercial para
+    evitar duplicados con altas concurrentes."""
+
+    __tablename__ = "project_counters"
+    __table_args__ = (UniqueConstraint("prefijo", "anio", name="uq_project_counter"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    prefijo: Mapped[str] = mapped_column(String(16), nullable=False)
+    anio: Mapped[int] = mapped_column(Integer, nullable=False)
+    ultimo_valor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
