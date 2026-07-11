@@ -93,6 +93,20 @@ def test_buscar_por_codigo_crp(client):
     assert response.json()[0]["crp_code"] == "GM26-03"
 
 
+# Escenario 2 (E3-H2): la búsqueda por nombre de cliente devuelve código,
+# estado (semáforo) y etapa de cada coincidencia, no solo el identificador.
+def test_buscar_por_cliente_incluye_codigo_estado_y_etapa(client):
+    token = _token("GERENCIA")
+    response = client.get(
+        "/projects/search", params={"q": "san pedro"}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    body = response.json()[0]
+    assert body["crp_code"] == "GM26-03"
+    assert body["etapa_actual"] == "EN_CURSO"
+    assert body["semaforo_color"] == "AMARILLO"
+
+
 def test_buscar_sin_coincidencias_devuelve_lista_vacia(client):
     token = _token("GERENCIA")
     response = client.get(
