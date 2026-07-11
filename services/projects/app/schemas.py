@@ -201,6 +201,8 @@ class CuotaOut(BaseModel):
     monto_pagado: int | None
     referencia_bancaria: str | None
     tiene_comprobante: bool
+    alertada_proxima: bool
+    alertada_vencida: bool
 
     model_config = {"from_attributes": True}
 
