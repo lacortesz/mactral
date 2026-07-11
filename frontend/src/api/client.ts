@@ -84,6 +84,46 @@ export async function comercialFetchBlob(path: string, token: string | null): Pr
   return response.blob();
 }
 
+// E4-H1: PATCH multipart (estado + nota opcional + archivo opcional) para el
+// checklist de importación — necesita FormData, no JSON.
+export async function projectsApiFetchMultipart<T>(
+  path: string,
+  formData: FormData,
+  token: string | null
+): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${PROJECTS_API_BASE_URL}${path}`, {
+    method: "PATCH",
+    headers,
+    body: formData,
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    throw new ApiError(response.status, data, extractMessage(response.status, data));
+  }
+
+  return data as T;
+}
+
+// E4-H1: descarga binaria del adjunto del checklist (mismo motivo que
+// comercialFetchBlob: un <a href> normal no manda el header Authorization).
+export async function projectsFetchBlob(path: string, token: string | null): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${PROJECTS_API_BASE_URL}${path}`, { headers });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new ApiError(response.status, data, extractMessage(response.status, data));
+  }
+  return response.blob();
+}
+
 export function retryAfterSeconds(error: ApiError): number | null {
   if (
     error.body &&

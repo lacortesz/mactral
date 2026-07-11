@@ -4,6 +4,7 @@ import { useAuth } from "./context/AuthContext";
 import ComercialPage from "./pages/ComercialPage";
 import DashboardPage from "./pages/DashboardPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ImportacionesPage from "./pages/ImportacionesPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
 import RegMaestroPage from "./pages/RegMaestroPage";
@@ -52,6 +53,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <RegMaestroPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/importaciones"
+        element={
+          <ProtectedRoute>
+            <ImportacionesPage />
           </ProtectedRoute>
         }
       />

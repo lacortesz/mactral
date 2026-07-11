@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, model_validator
 
-from app.domain import EstadoEtapa, Modulo, SemaforoColor
+from app.domain import EstadoEtapa, EstadoItemChecklist, Modulo, SemaforoColor, TipoItemChecklist
 
 
 class ProjectSearchResult(BaseModel):
@@ -67,6 +67,30 @@ class ProjectCreateOut(BaseModel):
     crp_code: str
 
 
+class ChecklistItemOut(BaseModel):
+    numero: str
+    nombre: str
+    tipo: TipoItemChecklist
+    estado: EstadoItemChecklist
+    fecha: datetime | None
+    nota: str | None
+    tiene_adjunto: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ChecklistItemUpdate(BaseModel):
+    estado: EstadoItemChecklist
+    nota: str | None = None
+
+    @model_validator(mode="after")
+    def check_nota_obligatoria_en_no_aplica(self):
+        # Escenario 2 (E4-H1): "No Aplica" siempre requiere justificación.
+        if self.estado == EstadoItemChecklist.NO_APLICA and not (self.nota and self.nota.strip()):
+            raise ValueError("Escribe una justificación para marcar el ítem como No Aplica")
+        return self
+
+
 class ProjectDetailOut(BaseModel):
     id: str
     crp_code: str
@@ -80,3 +104,6 @@ class ProjectDetailOut(BaseModel):
     semaforo_detalle: str
     modulos: list[ModuleStatusOut]
     linea_de_tiempo: list[TimelineEventOut]
+    checklist: list[ChecklistItemOut] = []
+    ingreso_bodega_fecha: datetime | None = None
+    ingreso_bodega_nota: str | None = None

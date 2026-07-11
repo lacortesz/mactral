@@ -4,14 +4,29 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.domain import EstadoEtapa, Rol, SemaforoColor, editable_modules
-from app.models import Project, ProjectCounter, ProjectEvent, ProjectModuleStatus
-from app.schemas import ModuleStatusOut, ProjectCreate, ProjectDetailOut, TimelineEventOut
+from app.domain import CHECKLIST_ITEMS, EstadoEtapa, Rol, SemaforoColor, can_edit_checklist, editable_modules
+from app.models import ImportChecklistItem, Project, ProjectCounter, ProjectEvent, ProjectModuleStatus
+from app.schemas import (
+    ChecklistItemOut,
+    ChecklistItemUpdate,
+    ModuleStatusOut,
+    ProjectCreate,
+    ProjectDetailOut,
+    TimelineEventOut,
+)
 
 MAX_SEARCH_RESULTS = 20
 
 
 class ProjectNotFoundError(Exception):
+    pass
+
+
+class ForbiddenError(Exception):
+    pass
+
+
+class ChecklistItemNotFoundError(Exception):
     pass
 
 
@@ -59,6 +74,16 @@ def create_project(db: Session, data: ProjectCreate) -> Project:
 
     for m in data.modulos:
         db.add(ProjectModuleStatus(project_id=project.id, modulo=m.modulo, estado=m.estado))
+
+    # E4-H1 restricción: el checklist documental solo aplica a proyectos GM;
+    # los STMB/STIN van directo a Técnico y nunca pasan por Importaciones.
+    if data.crp_prefix == "GM":
+        for orden, (numero, nombre, tipo) in enumerate(CHECKLIST_ITEMS):
+            db.add(
+                ImportChecklistItem(
+                    project_id=project.id, orden=orden, numero=numero, nombre=nombre, tipo=tipo
+                )
+            )
 
     now = datetime.utcnow()
     db.add(ProjectEvent(project_id=project.id, fecha=now, origen=data.evento_origen, mensaje=data.evento_mensaje))
@@ -115,6 +140,8 @@ def get_project_detail(db: Session, crp_code: str, actor_role: Rol) -> ProjectDe
         TimelineEventOut(fecha=e.fecha, origen=e.origen, mensaje=e.mensaje) for e in project.events
     ]
 
+    checklist = [ChecklistItemOut.model_validate(item) for item in project.checklist_items]
+
     return ProjectDetailOut(
         id=project.id,
         crp_code=project.crp_code,
@@ -128,4 +155,55 @@ def get_project_detail(db: Session, crp_code: str, actor_role: Rol) -> ProjectDe
         semaforo_detalle=project.semaforo_detalle,
         modulos=modulos,
         linea_de_tiempo=linea_de_tiempo,
+        checklist=checklist,
+        ingreso_bodega_fecha=project.ingreso_bodega_fecha,
+        ingreso_bodega_nota=project.ingreso_bodega_nota,
     )
+
+
+def _get_project_by_code(db: Session, crp_code: str) -> Project:
+    project = db.execute(
+        select(Project).where(Project.crp_code.ilike(crp_code.strip()))
+    ).scalar_one_or_none()
+    if project is None:
+        raise ProjectNotFoundError("No se encontraron proyectos con ese criterio")
+    return project
+
+
+def _get_checklist_item(project: Project, numero: str) -> ImportChecklistItem:
+    for item in project.checklist_items:
+        if item.numero == numero:
+            return item
+    raise ChecklistItemNotFoundError(f"El ítem {numero} no existe en el checklist de este proyecto")
+
+
+def update_checklist_item(
+    db: Session,
+    actor_role: Rol,
+    crp_code: str,
+    numero: str,
+    data: ChecklistItemUpdate,
+    adjunto_bytes: bytes | None = None,
+    adjunto_nombre: str | None = None,
+) -> ImportChecklistItem:
+    if not can_edit_checklist(actor_role):
+        raise ForbiddenError("Solo el rol Importaciones (o Gerencia) puede cambiar el checklist.")
+
+    project = _get_project_by_code(db, crp_code)
+    item = _get_checklist_item(project, numero)
+
+    item.estado = data.estado
+    item.nota = data.nota
+    item.fecha = datetime.utcnow()
+    if adjunto_bytes is not None:
+        item.adjunto_bytes = adjunto_bytes
+        item.adjunto_nombre = adjunto_nombre
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def get_checklist_attachment(db: Session, crp_code: str, numero: str) -> ImportChecklistItem:
+    project = _get_project_by_code(db, crp_code)
+    return _get_checklist_item(project, numero)

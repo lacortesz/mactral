@@ -46,6 +46,7 @@ const DEDICATED_MODULE_ROUTES: Partial<Record<ModuleKey, string>> = {
   administracion: "/usuarios",
   "reg-maestro": "/reg-maestro",
   comercial: "/comercial",
+  importaciones: "/importaciones",
 };
 
 export function moduleRoute(m: ModuleKey): string {
@@ -96,4 +97,14 @@ export const TIPO_CLASIFICACION_LABELS: Record<TipoClasificacion, string> = {
   GM: "GM (Registro Maestro)",
   STOCK_MOBILITY: "Stock — Mobility",
   STOCK_INDUSTRY: "Stock — Industry",
+};
+
+// E4-H1: catálogo del checklist documental de importación.
+export type TipoItemChecklist = "REQUERIDO" | "OPCIONAL";
+export type EstadoItemChecklist = "PENDIENTE" | "ARCHIVADO" | "NO_APLICA";
+
+export const ESTADO_ITEM_CHECKLIST_LABELS: Record<EstadoItemChecklist, string> = {
+  PENDIENTE: "Pendiente",
+  ARCHIVADO: "Archivado",
+  NO_APLICA: "No aplica",
 };
