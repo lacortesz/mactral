@@ -6,6 +6,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum as SAEnum,
+    Float,
     ForeignKey,
     Integer,
     LargeBinary,
@@ -17,11 +18,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.domain import (
+    EstadoCuentaPorPagar,
+    EstadoCuota,
     EstadoEtapa,
     EstadoInstalacion,
     EstadoItemChecklist,
     Modulo,
     SemaforoColor,
+    TipoGastoLogistico,
     TipoItemChecklist,
 )
 
@@ -60,6 +64,15 @@ class Project(Base):
     ingreso_bodega_fecha: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
     ingreso_bodega_nota: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
+    # E7-H1: valor del contrato y costo de fabricación, definidos por
+    # Administrativo al configurar las cuotas (base del margen bruto de
+    # E7-H2). No se pueden modificar sin aprobación de Gerencia.
+    valor_contrato: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    costo_fabricacion: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # E7-H5: fecha de aprobación de planos, dispara la solicitud de Anticipo 1.
+    planos_aprobados_fecha: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+
     module_statuses: Mapped[list["ProjectModuleStatus"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ProjectModuleStatus.modulo"
     )
@@ -71,6 +84,12 @@ class Project(Base):
     )
     instalacion: Mapped["Installation | None"] = relationship(
         back_populates="project", cascade="all, delete-orphan", uselist=False
+    )
+    cuotas: Mapped[list["Cuota"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", order_by="Cuota.numero"
+    )
+    cuentas_por_pagar: Mapped[list["CuentaPorPagar"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", order_by="CuentaPorPagar.fecha_vencimiento"
     )
 
 
@@ -205,3 +224,80 @@ class ProjectCounter(Base):
     prefijo: Mapped[str] = mapped_column(String(16), nullable=False)
     anio: Mapped[int] = mapped_column(Integer, nullable=False)
     ultimo_valor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class Cuota(Base):
+    """E7-H1: cuotas/anticipos del contrato (cuenta por cobrar al cliente),
+    máximo 3 por proyecto."""
+
+    __tablename__ = "cuotas"
+    __table_args__ = (UniqueConstraint("project_id", "numero", name="uq_cuota_numero"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    numero: Mapped[int] = mapped_column(Integer, nullable=False)
+    etiqueta: Mapped[str] = mapped_column(String(64), nullable=False)
+    monto: Mapped[int] = mapped_column(Integer, nullable=False)
+    porcentaje: Mapped[int] = mapped_column(Integer, nullable=False)
+    fecha_vencimiento: Mapped[date] = mapped_column(Date(), nullable=False)
+    estado: Mapped[EstadoCuota] = mapped_column(
+        SAEnum(EstadoCuota, name="estado_cuota", values_callable=_values),
+        nullable=False,
+        default=EstadoCuota.PENDIENTE,
+    )
+    fecha_pago: Mapped[date | None] = mapped_column(Date(), nullable=True)
+    monto_pagado: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    referencia_bancaria: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    comprobante_bytes: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
+    comprobante_nombre: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # E7-H4: evita duplicar las alertas de "por vencer"/"vencida".
+    alertada_proxima: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    alertada_vencida: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    project: Mapped["Project"] = relationship(back_populates="cuotas")
+
+    @property
+    def tiene_comprobante(self) -> bool:
+        return self.comprobante_bytes is not None
+
+
+class CuentaPorPagar(Base):
+    """E7-H3/E8-H1: gasto logístico / obligación con un proveedor, imputada
+    automáticamente al proyecto (E8-H3) y consolidada en el tablero de CxP
+    (E7-H3)."""
+
+    __tablename__ = "cuentas_por_pagar"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    tipo: Mapped[TipoGastoLogistico] = mapped_column(
+        SAEnum(TipoGastoLogistico, name="tipo_gasto_logistico", values_callable=_values), nullable=False
+    )
+    proveedor: Mapped[str] = mapped_column(String(255), nullable=False)
+    concepto: Mapped[str] = mapped_column(String(255), nullable=False)
+    monto: Mapped[int] = mapped_column(Integer, nullable=False)
+    moneda: Mapped[str] = mapped_column(String(8), nullable=False, default="COP")
+    tasa_cop: Mapped[float | None] = mapped_column(Float(), nullable=True)
+    fecha_vencimiento: Mapped[date] = mapped_column(Date(), nullable=False)
+    estado: Mapped[EstadoCuentaPorPagar] = mapped_column(
+        SAEnum(EstadoCuentaPorPagar, name="estado_cuenta_por_pagar", values_callable=_values),
+        nullable=False,
+        default=EstadoCuentaPorPagar.PENDIENTE,
+    )
+    fecha_pago: Mapped[date | None] = mapped_column(Date(), nullable=True)
+    soporte_bytes: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
+    soporte_nombre: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # E8-H1 restricción: los viáticos requieren autorización obligatoria del GG.
+    autorizado_gg: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+
+    project: Mapped["Project"] = relationship(back_populates="cuentas_por_pagar")
+
+    @property
+    def tiene_soporte(self) -> bool:
+        return self.soporte_bytes is not None
+
+    @property
+    def monto_cop(self) -> float:
+        return self.monto * self.tasa_cop if self.tasa_cop else float(self.monto)

@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, model_validator
 
 from app.domain import (
+    EstadoCuota,
     EstadoEtapa,
     EstadoInstalacion,
     EstadoItemChecklist,
@@ -146,6 +147,58 @@ class InstallationOut(BaseModel):
     fecha_real_entrega: date | None = None
     tiene_acta: bool = False
     observaciones: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class CuotaIn(BaseModel):
+    numero: int
+    etiqueta: str
+    monto: int
+    porcentaje: int
+    fecha_vencimiento: date
+
+
+class CuotasConfigCreate(BaseModel):
+    """E7-H1: configuración del esquema de pagos. Máximo 3 cuotas; la suma
+    de montos debe igualar el valor del contrato (validación automática)."""
+
+    valor_contrato: int
+    costo_fabricacion: int = 0
+    cuotas: list[CuotaIn]
+
+    @model_validator(mode="after")
+    def check_cuotas(self):
+        if not (1 <= len(self.cuotas) <= 3):
+            raise ValueError("Máximo 3 cuotas por proyecto")
+        if self.valor_contrato <= 0:
+            raise ValueError("El valor del contrato debe ser mayor a cero")
+        suma = sum(c.monto for c in self.cuotas)
+        if suma != self.valor_contrato:
+            raise ValueError("La suma de las cuotas debe igualar el valor del contrato")
+        numeros = sorted(c.numero for c in self.cuotas)
+        if numeros != list(range(1, len(self.cuotas) + 1)):
+            raise ValueError("Las cuotas deben numerarse consecutivamente desde 1")
+        return self
+
+
+class CuotaPagoCreate(BaseModel):
+    fecha_pago: date
+    monto_pagado: int
+    referencia_bancaria: str | None = None
+
+
+class CuotaOut(BaseModel):
+    numero: int
+    etiqueta: str
+    monto: int
+    porcentaje: int
+    fecha_vencimiento: date
+    estado: EstadoCuota
+    fecha_pago: date | None
+    monto_pagado: int | None
+    referencia_bancaria: str | None
+    tiene_comprobante: bool
 
     model_config = {"from_attributes": True}
 

@@ -526,3 +526,100 @@ def test_descargar_acta_inexistente_devuelve_404(client):
         f"/projects/{created['crp_code']}/instalacion/acta", headers={"Authorization": f"Bearer {token_tecnico}"}
     )
     assert response.status_code == 404
+
+
+CUOTAS_CONFIG_PAYLOAD = {
+    "valor_contrato": 45_000_000,
+    "costo_fabricacion": 12_500_000,
+    "cuotas": [
+        {"numero": 1, "etiqueta": "Anticipo 1", "monto": 22_500_000, "porcentaje": 50, "fecha_vencimiento": "2026-08-01"},
+        {"numero": 2, "etiqueta": "Anticipo 2", "monto": 13_500_000, "porcentaje": 30, "fecha_vencimiento": "2026-08-20"},
+        {"numero": 3, "etiqueta": "Pago Final", "monto": 9_000_000, "porcentaje": 20, "fecha_vencimiento": "2026-09-01"},
+    ],
+}
+
+
+def test_configurar_cuotas_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/cuotas",
+        json=CUOTAS_CONFIG_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert len(body) == 3
+    assert body[0]["estado"] == "PENDIENTE"
+
+
+def test_listar_cuotas_vacio_antes_de_configurar(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.get(f"/projects/{created['crp_code']}/cuotas", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_listar_cuotas_de_proyecto_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    response = client.get("/projects/NO-EXISTE/cuotas", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 404
+
+
+def test_registrar_pago_de_cuota_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/projects/{created['crp_code']}/cuotas",
+        json=CUOTAS_CONFIG_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/cuotas/1/pago",
+        json={"fecha_pago": "2026-07-30", "monto_pagado": 22_500_000, "referencia_bancaria": "TRF-001"},
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["estado"] == "PAGADO"
+
+
+def test_configurar_cuotas_suma_incorrecta_devuelve_422(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    payload = {**CUOTAS_CONFIG_PAYLOAD, "valor_contrato": 1}
+    response = client.post(
+        f"/projects/{created['crp_code']}/cuotas",
+        json=payload,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 422
+
+
+def test_otro_rol_no_puede_configurar_cuotas_via_api(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/cuotas",
+        json=CUOTAS_CONFIG_PAYLOAD,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403

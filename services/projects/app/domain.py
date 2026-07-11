@@ -107,3 +107,38 @@ def can_manage_installation(role: Rol) -> bool:
     """Restricción E5-H1/E5-H2: solo el Coordinador técnico (rol Técnico) y
     Gerencia pueden programar instalaciones y registrar el acta de entrega."""
     return role in (Rol.TECNICO, Rol.GERENCIA)
+
+
+# E7-H1/E7-H2/E7-H3: cuotas/anticipos (cuentas por cobrar) y cuentas por
+# pagar a proveedores (tablero financiero por proyecto).
+class EstadoCuota(str, Enum):
+    PENDIENTE = "PENDIENTE"
+    PAGADO = "PAGADO"
+
+
+# E8-H1: tipos de gasto logístico (también son la fuente de las cuentas por
+# pagar consolidadas de E7-H3 — cada gasto logístico ES una cuenta por
+# pagar a un proveedor, imputada automáticamente al proyecto — E8-H3).
+class TipoGastoLogistico(str, Enum):
+    VUELO = "VUELO"
+    HOSPEDAJE = "HOSPEDAJE"
+    TRANSPORTE = "TRANSPORTE"
+    VIATICOS = "VIATICOS"
+    OTRO = "OTRO"
+
+
+class EstadoCuentaPorPagar(str, Enum):
+    PENDIENTE = "PENDIENTE"
+    PAGADA = "PAGADA"
+
+
+def can_manage_financiero(role: Rol) -> bool:
+    """Restricción E7-H1/E7-H2: solo Administrativo (Administrador
+    financiero) y Gerencia gestionan cuotas, pagos y el tablero financiero."""
+    return role in (Rol.ADMINISTRATIVO, Rol.GERENCIA)
+
+
+def can_manage_logistica(role: Rol) -> bool:
+    """Restricción E8-H1: mismo actor que gestiona lo financiero
+    (Administrativo/Logística se mapea al rol Administrativo) o Gerencia."""
+    return role in (Rol.ADMINISTRATIVO, Rol.GERENCIA)
