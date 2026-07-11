@@ -3,10 +3,23 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import CurrentUser, get_current_user
-from app.schemas import CuotaOut, CuotaPagoCreate, CuotasConfigCreate
+from app.schemas import CuotaOut, CuotaPagoCreate, CuotasConfigCreate, TableroFinancieroOut
 from app.services import financiero_service, project_service
 
 router = APIRouter(prefix="/projects/{crp_code}/cuotas", tags=["financiero"])
+tablero_router = APIRouter(prefix="/projects/{crp_code}/tablero-financiero", tags=["financiero"])
+
+
+@tablero_router.get("", response_model=TableroFinancieroOut)
+def get_tablero_financiero(
+    crp_code: str,
+    db: Session = Depends(get_db),
+    _current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        return financiero_service.get_tablero(db, crp_code)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[CuotaOut])

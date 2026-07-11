@@ -142,3 +142,30 @@ def can_manage_logistica(role: Rol) -> bool:
     """Restricción E8-H1: mismo actor que gestiona lo financiero
     (Administrativo/Logística se mapea al rol Administrativo) o Gerencia."""
     return role in (Rol.ADMINISTRATIVO, Rol.GERENCIA)
+
+
+# E7-H2: tasas de referencia para convertir gastos logísticos en moneda
+# extranjera a COP (vista informativa del tablero financiero; no son tasas
+# en vivo — no hay integración con un proveedor de tasas de cambio).
+TASAS_CAMBIO_REFERENCIA: dict[str, float] = {
+    "USD": 4050.0,
+    "EUR": 4400.0,
+    "GBP": 5150.0,
+    "CNY": 560.0,
+}
+
+
+def calcular_semaforo_pago(cuotas: list) -> SemaforoColor:
+    """E7-H2: semáforo de pago del proyecto según el estado de sus cuotas.
+    ROJO si alguna cuota pendiente ya venció, AMARILLO si alguna vence dentro
+    de los próximos 7 días, VERDE en cualquier otro caso (incluye "sin
+    cuotas configuradas todavía")."""
+    from datetime import date, timedelta
+
+    hoy = date.today()
+    pendientes = [c for c in cuotas if c.estado == EstadoCuota.PENDIENTE]
+    if any(c.fecha_vencimiento < hoy for c in pendientes):
+        return SemaforoColor.ROJO
+    if any(c.fecha_vencimiento <= hoy + timedelta(days=7) for c in pendientes):
+        return SemaforoColor.AMARILLO
+    return SemaforoColor.VERDE

@@ -203,6 +203,26 @@ class CuotaOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TasaCambioOut(BaseModel):
+    moneda: str
+    tasa_cop: float
+
+
+class TableroFinancieroOut(BaseModel):
+    """E7-H2: tablero financiero por proyecto."""
+
+    crp_code: str
+    valor_contrato: int | None
+    costo_fabricacion: int
+    total_cobrado: int
+    total_por_cobrar: int
+    total_gastos_logisticos_cop: float
+    margen_bruto: float | None
+    semaforo_pago: SemaforoColor
+    cuotas: list[CuotaOut]
+    tasas_cambio: list[TasaCambioOut]
+
+
 class ProjectDetailOut(BaseModel):
     id: str
     crp_code: str

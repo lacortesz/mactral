@@ -4,9 +4,15 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from app.domain import EstadoCuota, Rol, can_manage_financiero
+from app.domain import (
+    TASAS_CAMBIO_REFERENCIA,
+    EstadoCuota,
+    Rol,
+    calcular_semaforo_pago,
+    can_manage_financiero,
+)
 from app.models import Cuota, Project, ProjectEvent
-from app.schemas import CuotaPagoCreate, CuotasConfigCreate
+from app.schemas import CuotaPagoCreate, CuotasConfigCreate, TableroFinancieroOut, TasaCambioOut
 from app.services.project_service import ForbiddenError, get_project_by_code
 
 
@@ -98,3 +104,30 @@ def registrar_pago(db: Session, actor: Actor, crp_code: str, numero: int, data: 
     db.commit()
     db.refresh(cuota)
     return cuota
+
+
+def get_tablero(db: Session, crp_code: str) -> TableroFinancieroOut:
+    """E7-H2: valor del contrato, desglose de cuotas, costos ya modelados
+    (fabricación + gastos logísticos de E8-H1/E7-H3) y margen bruto."""
+    project = get_project_by_code(db, crp_code)
+
+    total_cobrado = sum(c.monto_pagado or 0 for c in project.cuotas if c.estado == EstadoCuota.PAGADO)
+    total_por_cobrar = sum(c.monto for c in project.cuotas if c.estado == EstadoCuota.PENDIENTE)
+    total_gastos_logisticos_cop = sum(cxp.monto_cop for cxp in project.cuentas_por_pagar)
+
+    margen_bruto = None
+    if project.valor_contrato is not None:
+        margen_bruto = project.valor_contrato - project.costo_fabricacion - total_gastos_logisticos_cop
+
+    return TableroFinancieroOut(
+        crp_code=project.crp_code,
+        valor_contrato=project.valor_contrato,
+        costo_fabricacion=project.costo_fabricacion,
+        total_cobrado=total_cobrado,
+        total_por_cobrar=total_por_cobrar,
+        total_gastos_logisticos_cop=total_gastos_logisticos_cop,
+        margen_bruto=margen_bruto,
+        semaforo_pago=calcular_semaforo_pago(project.cuotas),
+        cuotas=project.cuotas,
+        tasas_cambio=[TasaCambioOut(moneda=m, tasa_cop=t) for m, t in TASAS_CAMBIO_REFERENCIA.items()],
+    )
