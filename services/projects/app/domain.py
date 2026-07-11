@@ -27,6 +27,10 @@ class EstadoEtapa(str, Enum):
     EN_CURSO = "EN_CURSO"
     CERRADO = "CERRADO"
     BLOQUEADO = "BLOQUEADO"
+    # E5-H2: estado final del proyecto al registrar el acta de entrega. Solo
+    # se usa en Project.etapa_actual (no en el estado por módulo, que tiene
+    # su propio enum "estado_etapa_modulo").
+    ENTREGADO = "ENTREGADO"
 
 
 class SemaforoColor(str, Enum):

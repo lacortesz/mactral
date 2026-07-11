@@ -154,6 +154,13 @@ class Installation(Base):
         nullable=False,
         default=EstadoInstalacion.PROGRAMADO,
     )
+
+    # E5-H2: acta de entrega.
+    fecha_real_entrega: Mapped[date | None] = mapped_column(Date(), nullable=True)
+    acta_bytes: Mapped[bytes | None] = mapped_column(LargeBinary(), nullable=True)
+    acta_nombre: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    observaciones: Mapped[str | None] = mapped_column(Text(), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(), default=datetime.utcnow, onupdate=datetime.utcnow
@@ -163,6 +170,10 @@ class Installation(Base):
     historial: Mapped[list["InstallationReprogramming"]] = relationship(
         back_populates="installation", cascade="all, delete-orphan", order_by="InstallationReprogramming.fecha_cambio"
     )
+
+    @property
+    def tiene_acta(self) -> bool:
+        return self.acta_bytes is not None
 
 
 class InstallationReprogramming(Base):

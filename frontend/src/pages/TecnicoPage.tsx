@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, projectsApiFetch } from "../api/client";
+import { ApiError, projectsApiFetch, projectsApiFetchMultipart, projectsFetchBlob } from "../api/client";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../context/AuthContext";
 import { ESTADO_INSTALACION_LABELS, type EstadoInstalacion } from "../domain";
@@ -26,6 +26,9 @@ type Installation = {
   ciudad: string;
   estado: EstadoInstalacion;
   historial: Reprogramming[];
+  fecha_real_entrega: string | null;
+  tiene_acta: boolean;
+  observaciones: string | null;
 };
 
 type ModuleStatus = {
@@ -67,6 +70,12 @@ export default function TecnicoPage() {
   const [reprogramError, setReprogramError] = useState<string | null>(null);
   const [reprogramSaving, setReprogramSaving] = useState(false);
 
+  const [actaFecha, setActaFecha] = useState("");
+  const [actaObservaciones, setActaObservaciones] = useState("");
+  const [actaFile, setActaFile] = useState<File | null>(null);
+  const [actaError, setActaError] = useState<string | null>(null);
+  const [actaSaving, setActaSaving] = useState(false);
+
   async function handleSearch(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -94,6 +103,10 @@ export default function TecnicoPage() {
       setReprogramError(null);
       setReprogramFecha(detail.instalacion?.fecha_instalacion ?? "");
       setReprogramMotivo("");
+      setActaFecha("");
+      setActaObservaciones("");
+      setActaFile(null);
+      setActaError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo abrir el proyecto");
     }
@@ -135,6 +148,48 @@ export default function TecnicoPage() {
       setReprogramError(err instanceof ApiError ? err.message : "No se pudo reprogramar la instalación");
     } finally {
       setReprogramSaving(false);
+    }
+  }
+
+  async function handleRegistrarActa(event: FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    setActaError(null);
+    setActaSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append("fecha_real_entrega", actaFecha);
+      if (actaObservaciones) formData.append("observaciones", actaObservaciones);
+      if (actaFile) formData.append("acta", actaFile);
+
+      await projectsApiFetchMultipart(
+        `/projects/${encodeURIComponent(selected.crp_code)}/instalacion/acta`,
+        formData,
+        token
+      );
+      // Escenario 2 (E5-H2): no adjuntar el acta no bloquea el registro; el
+      // recordatorio persistente se ve más abajo (selected.instalacion.tiene_acta).
+      await openProject(selected.crp_code);
+    } catch (err) {
+      setActaError(err instanceof ApiError ? err.message : "No se pudo registrar el acta de entrega");
+    } finally {
+      setActaSaving(false);
+    }
+  }
+
+  async function handleViewActa() {
+    if (!selected) return;
+    const tab = window.open("", "_blank");
+    try {
+      const blob = await projectsFetchBlob(
+        `/projects/${encodeURIComponent(selected.crp_code)}/instalacion/acta`,
+        token
+      );
+      const url = URL.createObjectURL(blob);
+      if (tab) tab.location.href = url;
+    } catch (err) {
+      tab?.close();
+      setActaError(err instanceof ApiError ? err.message : "No se pudo abrir el acta");
     }
   }
 
@@ -299,7 +354,69 @@ export default function TecnicoPage() {
                       {reprogramSaving ? "Guardando..." : "Reprogramar"}
                     </button>
                   </form>
+
+                  <h3 className="card-title" style={{ marginTop: 20 }}>
+                    Registro del acta de entrega
+                  </h3>
+                  {actaError && <div className="alert alert-error">{actaError}</div>}
+                  <form onSubmit={handleRegistrarActa}>
+                    <div className="form-grid">
+                      <div className="form-field">
+                        <label htmlFor="acta_fecha">Fecha real de firma del acta</label>
+                        <input
+                          id="acta_fecha"
+                          type="date"
+                          value={actaFecha}
+                          onChange={(e) => setActaFecha(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-field full">
+                        <label htmlFor="acta_observaciones">Observaciones técnicas</label>
+                        <input
+                          id="acta_observaciones"
+                          placeholder="Observaciones (opcional)..."
+                          value={actaObservaciones}
+                          onChange={(e) => setActaObservaciones(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-field full">
+                        <label htmlFor="acta_archivo">Acta de entrega firmada (PDF/JPG)</label>
+                        <input
+                          id="acta_archivo"
+                          type="file"
+                          onChange={(e) => setActaFile(e.target.files?.[0] ?? null)}
+                        />
+                      </div>
+                    </div>
+                    <button type="submit" className="btn-primary" style={{ marginTop: 16 }} disabled={actaSaving}>
+                      {actaSaving ? "Registrando..." : "Registrar acta y cerrar proyecto técnico"}
+                    </button>
+                  </form>
                 </>
+              )}
+
+              {selected.instalacion.estado === "COMPLETADO" && (
+                <div style={{ marginTop: 16 }}>
+                  {!selected.instalacion.tiene_acta && (
+                    <div className="alert alert-error">El acta no fue adjuntada. Recuerda subirla.</div>
+                  )}
+                  <p>
+                    <strong>Fecha real de entrega:</strong>{" "}
+                    {selected.instalacion.fecha_real_entrega &&
+                      new Date(selected.instalacion.fecha_real_entrega + "T00:00:00").toLocaleDateString("es-CO")}
+                    {selected.instalacion.observaciones && (
+                      <>
+                        {" "}
+                        · <strong>Observaciones:</strong> {selected.instalacion.observaciones}
+                      </>
+                    )}
+                  </p>
+                  {selected.instalacion.tiene_acta && (
+                    <button className="btn-link" onClick={handleViewActa}>
+                      Ver acta de entrega
+                    </button>
+                  )}
+                </div>
               )}
             </>
           )}

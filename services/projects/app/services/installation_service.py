@@ -4,9 +4,9 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from app.domain import EstadoInstalacion, Rol, can_manage_installation
-from app.models import Installation, InstallationReprogramming, Project
-from app.schemas import InstallationCreate, InstallationReprogram
+from app.domain import EstadoEtapa, EstadoInstalacion, Modulo, Rol, can_manage_installation
+from app.models import Installation, InstallationReprogramming, Project, ProjectEvent
+from app.schemas import ActaEntregaCreate, InstallationCreate, InstallationReprogram
 from app.services.project_service import ForbiddenError, get_project_by_code
 
 
@@ -90,4 +90,66 @@ def reprogramar_instalacion(
 
     db.commit()
     db.refresh(installation)
+    return installation
+
+
+def registrar_acta(
+    db: Session,
+    actor: Actor,
+    crp_code: str,
+    data: ActaEntregaCreate,
+    acta_bytes: bytes | None = None,
+    acta_nombre: str | None = None,
+) -> Installation:
+    """E5-H2: registra el acta de entrega y cierra el proyecto técnico.
+    Escenario 2: no adjuntar el acta NO bloquea el registro (el frontend
+    muestra la advertencia usando installation.tiene_acta == False)."""
+    if not can_manage_installation(actor.role):
+        raise ForbiddenError("Solo el Coordinador técnico (o Gerencia) puede registrar el acta de entrega.")
+
+    project = get_project_by_code(db, crp_code)
+    installation = project.instalacion
+    if installation is None:
+        raise InstallationNotFoundError("Este proyecto todavía no tiene una instalación programada.")
+
+    installation.fecha_real_entrega = data.fecha_real_entrega
+    installation.observaciones = data.observaciones
+    installation.estado = EstadoInstalacion.COMPLETADO
+    if acta_bytes is not None:
+        installation.acta_bytes = acta_bytes
+        installation.acta_nombre = acta_nombre
+
+    project.etapa_actual = EstadoEtapa.ENTREGADO
+    for m in project.module_statuses:
+        if m.modulo == Modulo.TECNICO:
+            m.estado = EstadoEtapa.CERRADO
+
+    now = datetime.utcnow()
+    db.add(
+        ProjectEvent(
+            project_id=project.id,
+            fecha=now,
+            origen="Técnico",
+            mensaje=f"Acta de entrega registrada · firma {data.fecha_real_entrega.isoformat()}",
+        )
+    )
+    db.add(
+        ProjectEvent(
+            project_id=project.id,
+            fecha=now,
+            origen="Sistema",
+            mensaje="Proyecto entregado. Solicitar Pago Final",
+        )
+    )
+
+    db.commit()
+    db.refresh(installation)
+    return installation
+
+
+def get_acta_attachment(db: Session, crp_code: str) -> Installation:
+    project = get_project_by_code(db, crp_code)
+    installation = project.instalacion
+    if installation is None:
+        raise InstallationNotFoundError("Este proyecto todavía no tiene una instalación programada.")
     return installation
