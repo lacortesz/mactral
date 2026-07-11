@@ -8,11 +8,15 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 class CurrentUser:
-    def __init__(self, id: str, name: str, email: str, role: Rol):
+    def __init__(self, id: str, name: str, email: str, role: Rol, raw_token: str):
         self.id = id
         self.name = name
         self.email = email
         self.role = role
+        # E2-H4: se reenvía tal cual a services/projects al crear el
+        # Registro Maestro, para que "Sistema" actúe con la identidad del
+        # vendedor que cerró la venta (mismo JWT_SECRET compartido).
+        self.raw_token = raw_token
 
 
 def get_current_user(
@@ -26,7 +30,11 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión inválida o expirada")
 
     return CurrentUser(
-        id=payload["sub"], name=payload["name"], email=payload["email"], role=Rol(payload["role"])
+        id=payload["sub"],
+        name=payload["name"],
+        email=payload["email"],
+        role=Rol(payload["role"]),
+        raw_token=credentials.credentials,
     )
 
 

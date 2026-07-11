@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.domain import EstadoLead, LineaNegocio
-from app.models import Lead, LeadCounter
+from app.models import Lead, LeadCounter, StockItem
 
 
 SEED_LEADS = [
@@ -84,6 +84,13 @@ SEED_LEADS = [
     ),
 ]
 
+# E2-H4: disponibilidad de ejemplo para la clasificación Stock al cerrar
+# venta (Mobility con unidades, Industry agotado, para probar ambos casos).
+SEED_STOCK_ITEMS = [
+    dict(linea_negocio=LineaNegocio.MOBILITY, tipo_producto="SSE Recta", cantidad_disponible=3),
+    dict(linea_negocio=LineaNegocio.INDUSTRY, tipo_producto="Montacargas", cantidad_disponible=0),
+]
+
 
 def main() -> None:
     db = SessionLocal()
@@ -106,6 +113,17 @@ def main() -> None:
                 db.add(LeadCounter(linea_negocio=linea, anio=2026, ultimo_valor=seeded_max))
             elif counter.ultimo_valor < seeded_max:
                 counter.ultimo_valor = seeded_max
+
+        for item in SEED_STOCK_ITEMS:
+            existing_item = db.execute(
+                select(StockItem).where(
+                    StockItem.linea_negocio == item["linea_negocio"],
+                    StockItem.tipo_producto == item["tipo_producto"],
+                )
+            ).scalar_one_or_none()
+            if existing_item is None:
+                db.add(StockItem(**item))
+                print(f"Stock creado: {item['linea_negocio'].value} · {item['tipo_producto']}")
 
         db.commit()
     finally:

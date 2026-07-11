@@ -11,6 +11,18 @@ from app import models  # noqa: F401
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
+from app.services import estado_service
+
+
+@pytest.fixture(autouse=True)
+def _stub_projects_client(monkeypatch):
+    # Las pruebas de API no deben depender de una red real hacia
+    # services/projects: se simula la respuesta de creación del Registro
+    # Maestro con un código generado determinista.
+    def _fake_create_project(token, payload):
+        return {"id": "fake-project-id", "crp_code": f"{payload['crp_prefix']}26-01"}
+
+    monkeypatch.setattr(estado_service.projects_client, "create_project", _fake_create_project)
 
 
 def _token(role: str, sub: str = "u1", name: str = "Carlos Martínez") -> str:
@@ -309,7 +321,7 @@ def test_marcar_como_vendido_sin_clasificacion_devuelve_422(client):
     assert response.status_code == 422
 
 
-def test_marcar_como_vendido_con_clasificacion_via_api(client):
+def test_marcar_como_vendido_con_clasificacion_gm_via_api(client):
     token = _token("COMERCIAL")
     lead = client.post(
         "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
@@ -322,11 +334,33 @@ def test_marcar_como_vendido_con_clasificacion_via_api(client):
 
     response = client.patch(
         f"/leads/{lead['id']}/estado",
-        json={"estado": "VENDIDO", "clasificacion": "STOCK_INDUSTRY"},
+        json={"estado": "VENDIDO", "clasificacion": "GM"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
-    assert response.json()["clasificacion"] == "STOCK_INDUSTRY"
+    body = response.json()
+    assert body["clasificacion"] == "GM"
+    assert body["codigo_generado"] == "GM26-01"
+
+
+def test_marcar_como_vendido_stock_sin_unidades_devuelve_422(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "ENVIADA"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = client.patch(
+        f"/leads/{lead['id']}/estado",
+        json={"estado": "VENDIDO", "clasificacion": "STOCK_MOBILITY"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+    assert "No hay unidades disponibles" in response.text
 
 
 def test_otro_vendedor_no_puede_cambiar_estado(client):

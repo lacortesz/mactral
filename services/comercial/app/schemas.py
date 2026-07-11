@@ -125,6 +125,7 @@ class LeadDetailOut(BaseModel):
     marca: str
     estado: EstadoLead
     clasificacion: TipoClasificacion | None
+    codigo_generado: str | None
     vendedor_id: str
     vendedor_nombre: str
     created_at: datetime

@@ -1,8 +1,9 @@
 import pytest
 
 from app.domain import EstadoLead, LineaNegocio, Rol, TipoClasificacion
+from app.models import StockItem
 from app.schemas import EstadoChange, LeadCreate
-from app.services import estado_service, lead_service
+from app.services import estado_service, lead_service, stock_service
 
 
 class _Actor:
@@ -29,6 +30,17 @@ LEAD_INPUT = LeadCreate(
 
 def _make_lead(db_session):
     return lead_service.create_lead(db_session, VENDEDOR, LEAD_INPUT)
+
+
+@pytest.fixture(autouse=True)
+def _stub_projects_client(monkeypatch):
+    # Las pruebas de estado no deben depender de una red real hacia
+    # services/projects: se simula la respuesta de creación del Registro
+    # Maestro con un código generado determinista.
+    def _fake_create_project(token, payload):
+        return {"id": "fake-project-id", "crp_code": f"{payload['crp_prefix']}26-01"}
+
+    monkeypatch.setattr(estado_service.projects_client, "create_project", _fake_create_project)
 
 
 # Escenario 1 (E2-H3): avance secuencial de estado.
@@ -62,7 +74,83 @@ def test_avanzar_de_enviada_a_vendido_con_clasificacion(db_session):
 
     assert updated.estado == EstadoLead.VENDIDO
     assert updated.clasificacion == TipoClasificacion.GM
+    assert updated.codigo_generado == "GM26-01"
     assert len(updated.historial_estados) == 2
+
+
+# Escenario 1 (E2-H4): clasificación Stock con unidades disponibles.
+def test_clasificar_stock_mobility_con_unidad_disponible_la_reserva(db_session):
+    lead = _make_lead(db_session)
+    db_session.add(StockItem(linea_negocio=LineaNegocio.MOBILITY, tipo_producto="SSE Curva", cantidad_disponible=2))
+    db_session.commit()
+    estado_service.change_estado(db_session, VENDEDOR, lead.id, EstadoChange(estado=EstadoLead.ENVIADA))
+
+    updated = estado_service.change_estado(
+        db_session,
+        VENDEDOR,
+        lead.id,
+        EstadoChange(estado=EstadoLead.VENDIDO, clasificacion=TipoClasificacion.STOCK_MOBILITY),
+    )
+
+    assert updated.codigo_generado == "STMB26-01"
+    item = (
+        db_session.query(StockItem)
+        .filter_by(linea_negocio=LineaNegocio.MOBILITY, tipo_producto="SSE Curva")
+        .one()
+    )
+    assert item.cantidad_disponible == 1
+
+
+# Escenario 2 (E2-H4): sin unidades disponibles, bloquea el cierre.
+def test_clasificar_stock_sin_unidades_disponibles_queda_bloqueado(db_session):
+    lead = _make_lead(db_session)
+    db_session.add(StockItem(linea_negocio=LineaNegocio.MOBILITY, tipo_producto="SSE Curva", cantidad_disponible=0))
+    db_session.commit()
+    estado_service.change_estado(db_session, VENDEDOR, lead.id, EstadoChange(estado=EstadoLead.ENVIADA))
+
+    with pytest.raises(stock_service.NoStockError, match=stock_service.MENSAJE_SIN_STOCK):
+        estado_service.change_estado(
+            db_session,
+            VENDEDOR,
+            lead.id,
+            EstadoChange(estado=EstadoLead.VENDIDO, clasificacion=TipoClasificacion.STOCK_MOBILITY),
+        )
+
+    # El lead no debe quedar marcado como Vendido si el cierre se bloqueó.
+    refreshed = lead_service.get_lead_detail(db_session, lead.id)
+    assert refreshed.estado == EstadoLead.ENVIADA
+    assert refreshed.codigo_generado is None
+
+
+def test_clasificar_stock_sin_registro_de_stock_queda_bloqueado(db_session):
+    lead = _make_lead(db_session)
+    estado_service.change_estado(db_session, VENDEDOR, lead.id, EstadoChange(estado=EstadoLead.ENVIADA))
+
+    with pytest.raises(stock_service.NoStockError):
+        estado_service.change_estado(
+            db_session,
+            VENDEDOR,
+            lead.id,
+            EstadoChange(estado=EstadoLead.VENDIDO, clasificacion=TipoClasificacion.STOCK_INDUSTRY),
+        )
+
+
+def test_clasificar_stock_industry_genera_codigo_stin(db_session):
+    lead = _make_lead(db_session)
+    db_session.add(
+        StockItem(linea_negocio=LineaNegocio.INDUSTRY, tipo_producto="SSE Curva", cantidad_disponible=1)
+    )
+    db_session.commit()
+    estado_service.change_estado(db_session, VENDEDOR, lead.id, EstadoChange(estado=EstadoLead.ENVIADA))
+
+    updated = estado_service.change_estado(
+        db_session,
+        VENDEDOR,
+        lead.id,
+        EstadoChange(estado=EstadoLead.VENDIDO, clasificacion=TipoClasificacion.STOCK_INDUSTRY),
+    )
+
+    assert updated.codigo_generado == "STIN26-01"
 
 
 # Escenario 2 (E2-H3): salto de estado bloqueado.

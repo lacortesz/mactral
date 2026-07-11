@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import CurrentUser, get_current_user
-from app.schemas import ProjectDetailOut, ProjectSearchResult
+from app.schemas import ProjectCreate, ProjectCreateOut, ProjectDetailOut, ProjectSearchResult
 from app.services import project_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -16,6 +16,18 @@ def search(
     _current_user: CurrentUser = Depends(get_current_user),
 ):
     return project_service.search_projects(db, q)
+
+
+@router.post("", response_model=ProjectCreateOut, status_code=status.HTTP_201_CREATED)
+def create(
+    payload: ProjectCreate,
+    db: Session = Depends(get_db),
+    # E2-H4: el actor conceptual es "Sistema", pero técnicamente quien llama
+    # es el servicio comercial reenviando el JWT del vendedor que cerró la
+    # venta; cualquier usuario autenticado puede activar el Registro Maestro.
+    _current_user: CurrentUser = Depends(get_current_user),
+):
+    return project_service.create_project(db, payload)
 
 
 @router.get("/{crp_code}", response_model=ProjectDetailOut)

@@ -65,6 +65,7 @@ type LeadDetail = LeadListItem & {
   marca: string;
   vendedor_id: string;
   clasificacion: TipoClasificacion | null;
+  codigo_generado: string | null;
   interacciones: Interaction[];
   cotizaciones: Quotation[];
   historial_estados: EstadoHistorialItem[];
@@ -427,6 +428,7 @@ export default function ComercialPage() {
             {selected.clasificacion && (
               <p style={{ fontSize: 13, color: "var(--mactral-text-muted)" }}>
                 Clasificación: <strong>{TIPO_CLASIFICACION_LABELS[selected.clasificacion]}</strong>
+                {selected.codigo_generado && <> · Código generado: <strong>{selected.codigo_generado}</strong></>}
               </p>
             )}
 
@@ -470,6 +472,7 @@ export default function ComercialPage() {
                   Elige la clasificación para activar el flujo correspondiente. Una vez confirmada
                   no se puede modificar sin aprobación de Gerencia.
                 </p>
+                {estadoError && <div className="alert alert-error">{estadoError}</div>}
                 <div className="form-field">
                   <label htmlFor="clasificacion">Clasificación</label>
                   <select

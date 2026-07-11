@@ -131,3 +131,46 @@ def test_token_invalido_devuelve_401(client):
         "/projects/GM26-03", headers={"Authorization": "Bearer token-invalido"}
     )
     assert response.status_code == 401
+
+
+GM_CREATE_PAYLOAD = {
+    "crp_prefix": "GM",
+    "tipo": "GM - Importación",
+    "cliente": "Residencias El Pinar",
+    "ciudad": "Pereira",
+    "producto": "SSE Recta",
+    "marca": "Stannah",
+    "modulos": [
+        {"modulo": "comercial", "estado": "CERRADO"},
+        {"modulo": "reg-maestro", "estado": "CERRADO"},
+        {"modulo": "importaciones", "estado": "EN_CURSO"},
+        {"modulo": "tecnico", "estado": "PENDIENTE"},
+    ],
+    "evento_origen": "Comercial",
+    "evento_mensaje": "Venta cerrada · lead MOB26-018",
+}
+
+
+def test_crear_registro_maestro_devuelve_codigo_generado(client):
+    token = _token("COMERCIAL")
+    response = client.post("/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["crp_code"].startswith("GM")
+
+    detail = client.get(f"/projects/{body['crp_code']}", headers={"Authorization": f"Bearer {token}"}).json()
+    assert detail["cliente"] == "Residencias El Pinar"
+    assert len(detail["linea_de_tiempo"]) == 2
+
+
+def test_crear_registro_maestro_con_prefijo_invalido_devuelve_422(client):
+    token = _token("COMERCIAL")
+    payload = {**GM_CREATE_PAYLOAD, "crp_prefix": "XYZ"}
+    response = client.post("/projects", json=payload, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 422
+
+
+def test_crear_registro_maestro_sin_token_devuelve_401(client):
+    response = client.post("/projects", json=GM_CREATE_PAYLOAD)
+    assert response.status_code == 401
