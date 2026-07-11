@@ -42,6 +42,27 @@ type ProjectDetail = {
   linea_de_tiempo: TimelineEvent[];
 };
 
+type Comentario = {
+  id: string;
+  autor_nombre: string;
+  mensaje: string;
+  fecha: string;
+  menciones: string[];
+};
+
+function renderMensajeConMenciones(mensaje: string) {
+  const partes = mensaje.split(/(@\w+)/g);
+  return partes.map((parte, i) =>
+    parte.startsWith("@") ? (
+      <strong key={i} style={{ color: "var(--mactral-yellow-dark)" }}>
+        {parte}
+      </strong>
+    ) : (
+      <span key={i}>{parte}</span>
+    )
+  );
+}
+
 const SEMAFORO_COLORS: Record<SemaforoColor, string> = {
   VERDE: "var(--mactral-green)",
   AMARILLO: "var(--mactral-yellow-dark)",
@@ -65,6 +86,39 @@ export default function RegMaestroPage() {
   const [selected, setSelected] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [comentarios, setComentarios] = useState<Comentario[] | null>(null);
+  const [nuevoComentario, setNuevoComentario] = useState("");
+  const [comentarioError, setComentarioError] = useState<string | null>(null);
+  const [enviandoComentario, setEnviandoComentario] = useState(false);
+
+  async function loadComentarios(crpCode: string) {
+    const found = await projectsApiFetch<Comentario[]>(
+      `/projects/${encodeURIComponent(crpCode)}/comentarios`,
+      { token }
+    );
+    setComentarios(found);
+  }
+
+  async function handleAgregarComentario(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || !nuevoComentario.trim()) return;
+    setComentarioError(null);
+    setEnviandoComentario(true);
+    try {
+      await projectsApiFetch(`/projects/${encodeURIComponent(selected.crp_code)}/comentarios`, {
+        method: "POST",
+        token,
+        body: { mensaje: nuevoComentario },
+      });
+      setNuevoComentario("");
+      await loadComentarios(selected.crp_code);
+    } catch (err) {
+      setComentarioError(err instanceof ApiError ? err.message : "No se pudo publicar el comentario");
+    } finally {
+      setEnviandoComentario(false);
+    }
+  }
 
   async function handleSearch(event: FormEvent) {
     event.preventDefault();
@@ -92,6 +146,7 @@ export default function RegMaestroPage() {
         { token }
       );
       setSelected(detail);
+      await loadComentarios(crpCode);
     } catch (err) {
       // Escenario 2 (E1-H3): proyecto no encontrado.
       setError(err instanceof ApiError ? err.message : "No se pudo abrir el proyecto");
@@ -254,6 +309,38 @@ export default function RegMaestroPage() {
                   >
                     <strong>{new Date(e.fecha).toLocaleDateString("es-CO")}</strong>{" "}
                     <span className="badge badge-role">{e.origen}</span> {e.mensaje}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="card">
+            <h2 className="card-title">Comentarios</h2>
+            {comentarioError && <div className="alert alert-error">{comentarioError}</div>}
+            <form onSubmit={handleAgregarComentario} style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              <input
+                style={{ flex: 1, border: "1px solid var(--mactral-border)", borderRadius: 6, padding: "9px 10px" }}
+                placeholder="Escribe un comentario... usa @usuario para mencionar"
+                value={nuevoComentario}
+                onChange={(e) => setNuevoComentario(e.target.value)}
+              />
+              <button type="submit" className="btn-primary" disabled={enviandoComentario || !nuevoComentario.trim()}>
+                {enviandoComentario ? "Publicando..." : "Comentar"}
+              </button>
+            </form>
+
+            {comentarios && comentarios.length === 0 ? (
+              <p style={{ color: "var(--mactral-text-muted)", fontSize: 13 }}>Sin comentarios todavía.</p>
+            ) : (
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, fontSize: 13 }}>
+                {comentarios?.map((c) => (
+                  <li key={c.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--mactral-border)" }}>
+                    <strong>{c.autor_nombre}</strong>{" "}
+                    <span style={{ color: "var(--mactral-text-muted)" }}>
+                      {new Date(c.fecha).toLocaleString("es-CO")}
+                    </span>
+                    <div>{renderMensajeConMenciones(c.mensaje)}</div>
                   </li>
                 ))}
               </ul>

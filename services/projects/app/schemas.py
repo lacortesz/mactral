@@ -229,6 +229,26 @@ class TableroFinancieroOut(BaseModel):
     anticipo1_solicitud_confirmada: bool
 
 
+class ComentarioCreate(BaseModel):
+    mensaje: str
+
+    @model_validator(mode="after")
+    def check_mensaje(self):
+        if not self.mensaje.strip():
+            raise ValueError("El comentario no puede estar vacío")
+        return self
+
+
+class ComentarioOut(BaseModel):
+    id: str
+    autor_nombre: str
+    mensaje: str
+    fecha: datetime
+    menciones: list[str]
+
+    model_config = {"from_attributes": True}
+
+
 class NotificacionOut(BaseModel):
     """E9-H2: bandeja de notificaciones — asignación e inactividad."""
 
