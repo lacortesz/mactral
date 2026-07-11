@@ -91,3 +91,15 @@ def can_edit_checklist(role: Rol) -> bool:
     mismo criterio usado en el resto de la plataforma) puede cambiar los
     estados del checklist."""
     return role in (Rol.IMPORTACIONES, Rol.GERENCIA)
+
+
+# E5-H1/E5-H2: instalación y entrega (módulo Técnico).
+class EstadoInstalacion(str, Enum):
+    PROGRAMADO = "PROGRAMADO"
+    COMPLETADO = "COMPLETADO"
+
+
+def can_manage_installation(role: Rol) -> bool:
+    """Restricción E5-H1/E5-H2: solo el Coordinador técnico (rol Técnico) y
+    Gerencia pueden programar instalaciones y registrar el acta de entrega."""
+    return role in (Rol.TECNICO, Rol.GERENCIA)

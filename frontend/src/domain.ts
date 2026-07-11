@@ -47,6 +47,7 @@ const DEDICATED_MODULE_ROUTES: Partial<Record<ModuleKey, string>> = {
   "reg-maestro": "/reg-maestro",
   comercial: "/comercial",
   importaciones: "/importaciones",
+  tecnico: "/tecnico",
 };
 
 export function moduleRoute(m: ModuleKey): string {
@@ -102,6 +103,14 @@ export const TIPO_CLASIFICACION_LABELS: Record<TipoClasificacion, string> = {
 // E4-H1: catálogo del checklist documental de importación.
 export type TipoItemChecklist = "REQUERIDO" | "OPCIONAL";
 export type EstadoItemChecklist = "PENDIENTE" | "ARCHIVADO" | "NO_APLICA";
+
+// E5-H1/E5-H2: catálogo de la instalación (módulo Técnico).
+export type EstadoInstalacion = "PROGRAMADO" | "COMPLETADO";
+
+export const ESTADO_INSTALACION_LABELS: Record<EstadoInstalacion, string> = {
+  PROGRAMADO: "Programado",
+  COMPLETADO: "Completado",
+};
 
 export const ESTADO_ITEM_CHECKLIST_LABELS: Record<EstadoItemChecklist, string> = {
   PENDIENTE: "Pendiente",

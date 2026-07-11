@@ -1,8 +1,9 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
@@ -15,7 +16,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.domain import EstadoEtapa, EstadoItemChecklist, Modulo, SemaforoColor, TipoItemChecklist
+from app.domain import (
+    EstadoEtapa,
+    EstadoInstalacion,
+    EstadoItemChecklist,
+    Modulo,
+    SemaforoColor,
+    TipoItemChecklist,
+)
 
 
 def _values(enum_cls):
@@ -60,6 +68,9 @@ class Project(Base):
     )
     checklist_items: Mapped[list["ImportChecklistItem"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ImportChecklistItem.orden"
+    )
+    instalacion: Mapped["Installation | None"] = relationship(
+        back_populates="project", cascade="all, delete-orphan", uselist=False
     )
 
 
@@ -123,6 +134,52 @@ class ImportChecklistItem(Base):
     @property
     def tiene_adjunto(self) -> bool:
         return self.adjunto_bytes is not None
+
+
+class Installation(Base):
+    """E5-H1/E5-H2: programación de instalación y acta de entrega (módulo
+    Técnico). Relación 1:1 con Project — un proyecto tiene una sola
+    instalación, reprogramable."""
+
+    __tablename__ = "installations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), unique=True, nullable=False)
+    fecha_instalacion: Mapped[date] = mapped_column(Date(), nullable=False)
+    tecnico_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    tecnico_nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    ciudad: Mapped[str] = mapped_column(String(255), nullable=False)
+    estado: Mapped[EstadoInstalacion] = mapped_column(
+        SAEnum(EstadoInstalacion, name="estado_instalacion", values_callable=_values),
+        nullable=False,
+        default=EstadoInstalacion.PROGRAMADO,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    project: Mapped["Project"] = relationship(back_populates="instalacion")
+    historial: Mapped[list["InstallationReprogramming"]] = relationship(
+        back_populates="installation", cascade="all, delete-orphan", order_by="InstallationReprogramming.fecha_cambio"
+    )
+
+
+class InstallationReprogramming(Base):
+    """E5-H1 escenario 2: historial de reprogramaciones de la instalación."""
+
+    __tablename__ = "installation_reprogrammings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    installation_id: Mapped[str] = mapped_column(ForeignKey("installations.id"), nullable=False)
+    fecha_anterior: Mapped[date] = mapped_column(Date(), nullable=False)
+    fecha_nueva: Mapped[date] = mapped_column(Date(), nullable=False)
+    motivo: Mapped[str] = mapped_column(Text(), nullable=False)
+    usuario_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    usuario_nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    fecha_cambio: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+
+    installation: Mapped["Installation"] = relationship(back_populates="historial")
 
 
 class ProjectCounter(Base):
