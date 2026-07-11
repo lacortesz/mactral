@@ -57,3 +57,17 @@ def can_manage_leads(role: Rol) -> bool:
     """E2-H1 restricción: solo el vendedor (rol Comercial) y Gerencia
     pueden crear/editar leads."""
     return role in (Rol.COMERCIAL, Rol.GERENCIA)
+
+
+# E6-H1: registro de entradas de inventario.
+class TipoMovimientoStock(str, Enum):
+    ENTRADA = "ENTRADA"
+    SALIDA = "SALIDA"
+
+
+def can_manage_stock(role: Rol) -> bool:
+    """Restricción E6-H1: solo Bodega y Administrador pueden registrar
+    entradas. La plataforma no tiene un rol "Bodega" independiente (E1-H1
+    fija los roles en Comercial/Importaciones/Técnico/Administrativo/
+    Gerencia), así que "Bodega" se mapea al rol Administrativo."""
+    return role in (Rol.ADMINISTRATIVO, Rol.GERENCIA)

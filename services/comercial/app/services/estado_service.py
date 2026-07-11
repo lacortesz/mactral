@@ -66,8 +66,9 @@ def _activar_clasificacion(db: Session, actor: Actor, lead: Lead, raw_token: str
 
     # Restricción Stock: si no hay unidades disponibles, se bloquea el
     # cierre de la venta (no se genera código ni se crea el Registro Maestro).
+    stock_item = None
     if clasificacion in _STOCK_LINEA:
-        stock_service.reservar_unidad(db, _STOCK_LINEA[clasificacion], lead.tipo_producto)
+        stock_item = stock_service.reservar_unidad(db, _STOCK_LINEA[clasificacion], lead.tipo_producto)
 
     config = _CLASIFICACION_CONFIG[clasificacion]
     payload = {
@@ -83,6 +84,9 @@ def _activar_clasificacion(db: Session, actor: Actor, lead: Lead, raw_token: str
     }
     resultado = projects_client.create_project(raw_token, payload)
     lead.codigo_generado = resultado["crp_code"]
+
+    if stock_item is not None:
+        stock_service.registrar_salida_venta(db, stock_item, actor, resultado["crp_code"])
 
 
 def change_estado(db: Session, actor: Actor, lead_id: str, data: EstadoChange, raw_token: str = "") -> Lead:

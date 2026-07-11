@@ -39,10 +39,14 @@ class Modulo(str, Enum):
 
 ROLE_MODULE_ACCESS: dict[Rol, set[Modulo]] = {
     Rol.GERENCIA: set(Modulo),
-    Rol.COMERCIAL: {Modulo.COMERCIAL, Modulo.REG_MAESTRO},
+    # E6-H1: Comercial consulta la disponibilidad de stock (no la edita) al
+    # clasificar una venta como Stock — Mobility/Industry.
+    Rol.COMERCIAL: {Modulo.COMERCIAL, Modulo.REG_MAESTRO, Modulo.STOCK},
     Rol.IMPORTACIONES: {Modulo.IMPORTACIONES, Modulo.REG_MAESTRO},
     Rol.TECNICO: {Modulo.TECNICO, Modulo.STOCK, Modulo.REG_MAESTRO},
-    Rol.ADMINISTRATIVO: {Modulo.FINANCIERO, Modulo.REG_MAESTRO},
+    # E6-H1: "Bodega" no es un rol propio de la plataforma (E1-H1 fija los
+    # roles); se mapea a Administrativo, que además ya administra Financiero.
+    Rol.ADMINISTRATIVO: {Modulo.FINANCIERO, Modulo.REG_MAESTRO, Modulo.STOCK},
 }
 
 

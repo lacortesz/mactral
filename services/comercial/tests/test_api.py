@@ -386,3 +386,59 @@ def test_cambiar_estado_de_lead_inexistente_devuelve_404(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 404
+
+
+# --- E6-H1: registro de entradas de inventario ------------------------------
+
+
+def test_registrar_entrada_de_stock_via_api(client):
+    token = _token("ADMINISTRATIVO")
+    response = client.post(
+        "/stock/entrada",
+        json={"linea_negocio": "MOBILITY", "tipo_producto": "SSE Recta", "cantidad": 5},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["cantidad_disponible"] == 5
+    assert body["cantidad_total"] == 5
+
+
+def test_registrar_entrada_referencia_nueva_via_api(client):
+    token = _token("ADMINISTRATIVO")
+    response = client.post(
+        "/stock/entrada",
+        json={
+            "linea_negocio": "INDUSTRY",
+            "tipo_producto": "Montacargas",
+            "cantidad": 3,
+            "nombre": "Montacargas eléctrico",
+            "color": "Amarillo",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 201
+    assert response.json()["nombre"] == "Montacargas eléctrico"
+
+
+def test_listar_stock_via_api(client):
+    token = _token("ADMINISTRATIVO")
+    client.post(
+        "/stock/entrada",
+        json={"linea_negocio": "MOBILITY", "tipo_producto": "SSE Recta", "cantidad": 2},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = client.get("/stock", params={"linea_negocio": "MOBILITY"}, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_otro_rol_no_puede_registrar_entrada_via_api(client):
+    token = _token("COMERCIAL")
+    response = client.post(
+        "/stock/entrada",
+        json={"linea_negocio": "MOBILITY", "tipo_producto": "SSE Recta", "cantidad": 1},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403

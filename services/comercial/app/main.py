@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import leads
+from app.routers import leads, stock
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -19,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(leads.router)
+app.include_router(stock.router)
 
 
 @app.get("/health")

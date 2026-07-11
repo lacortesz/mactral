@@ -100,6 +100,10 @@ def test_clasificar_stock_mobility_con_unidad_disponible_la_reserva(db_session):
     )
     assert item.cantidad_disponible == 1
 
+    # E6-H2: la salida queda registrada en el historial con el código CRP.
+    assert item.ultimo_movimiento.tipo.value == "SALIDA"
+    assert item.ultimo_movimiento.referencia_crp == "STMB26-01"
+
 
 # Escenario 2 (E2-H4): sin unidades disponibles, bloquea el cierre.
 def test_clasificar_stock_sin_unidades_disponibles_queda_bloqueado(db_session):
