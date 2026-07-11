@@ -287,6 +287,27 @@ class RentabilidadOut(BaseModel):
     valor_contrato_total: int
 
 
+class KpisOperativosOut(BaseModel):
+    """E11-H1: KPIs operativos por área."""
+
+    proyectos_gm_con_checklist_incompleto: int
+    instalaciones_programadas: int
+    instalaciones_completadas: int
+    notificaciones_asignacion_pendientes: int
+    notificaciones_inactividad_pendientes: int
+
+
+class KpisFinancierosOut(BaseModel):
+    """E11-H2: KPIs financieros globales."""
+
+    total_cobrado_cop: int
+    total_por_cobrar_cop: int
+    total_gastos_logisticos_pendientes_cop: float
+    total_gastos_logisticos_pagados_cop: float
+    margen_bruto_total: float
+    valor_contrato_total: int
+
+
 class NotificacionOut(BaseModel):
     """E9-H2: bandeja de notificaciones — asignación e inactividad."""
 

@@ -919,3 +919,27 @@ def test_rentabilidad_otro_rol_devuelve_403_via_api(client):
     token = _token("ADMINISTRATIVO")
     response = client.get("/reportes/rentabilidad", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
+
+
+def test_kpis_operativos_solo_gerencia_via_api(client):
+    token = _token("GERENCIA")
+    response = client.get("/reportes/kpis-operativos", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+
+
+def test_kpis_operativos_otro_rol_devuelve_403_via_api(client):
+    token = _token("COMERCIAL")
+    response = client.get("/reportes/kpis-operativos", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403
+
+
+def test_kpis_financieros_solo_gerencia_via_api(client):
+    token = _token("GERENCIA")
+    response = client.get("/reportes/kpis-financieros", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+
+
+def test_kpis_financieros_otro_rol_devuelve_403_via_api(client):
+    token = _token("COMERCIAL")
+    response = client.get("/reportes/kpis-financieros", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403
