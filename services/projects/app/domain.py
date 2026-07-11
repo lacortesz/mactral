@@ -89,6 +89,10 @@ CHECKLIST_ITEMS: list[tuple[str, str, TipoItemChecklist]] = [
 # E4-H2: al archivar este ítem se dispara la notificación de Anticipo 2.
 NUMERO_ITEM_BL = "8"
 
+# E7-H5: cuando ambos ítems de plano quedan archivados se consideran los
+# "planos aprobados" y se dispara la solicitud de Anticipo 1.
+NUMEROS_ITEM_PLANOS = ("1", "2")
+
 
 def can_edit_checklist(role: Rol) -> bool:
     """Restricción E4-H1: solo el rol Importaciones (y Gerencia, con el

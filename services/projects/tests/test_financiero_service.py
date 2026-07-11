@@ -4,9 +4,16 @@ from datetime import date, timedelta
 import pytest
 from pydantic import ValidationError
 
-from app.domain import EstadoCuentaPorPagar, Modulo, Rol, TipoGastoLogistico
+from app.domain import EstadoCuentaPorPagar, EstadoItemChecklist, Modulo, Rol, TipoGastoLogistico
 from app.models import CuentaPorPagar
-from app.schemas import CuotaIn, CuotaPagoCreate, CuotasConfigCreate, ModuleStatusIn, ProjectCreate
+from app.schemas import (
+    ChecklistItemUpdate,
+    CuotaIn,
+    CuotaPagoCreate,
+    CuotasConfigCreate,
+    ModuleStatusIn,
+    ProjectCreate,
+)
 from app.services import financiero_service, project_service
 
 
@@ -378,3 +385,66 @@ def test_cuota_lejana_no_genera_alerta(db_session):
     cuotas = financiero_service.list_cuotas(db_session, project.crp_code)
 
     assert all(not c.alertada_proxima and not c.alertada_vencida for c in cuotas)
+
+
+# E7-H5: disparador automático de solicitud de Anticipo 1 (planos aprobados)
+# y confirmación manual del Administrador.
+def _aprobar_planos(db_session, project):
+    project_service.update_checklist_item(
+        db_session, Rol.IMPORTACIONES, project.crp_code, "1", ChecklistItemUpdate(estado=EstadoItemChecklist.ARCHIVADO)
+    )
+    return project_service.update_checklist_item(
+        db_session, Rol.IMPORTACIONES, project.crp_code, "2", ChecklistItemUpdate(estado=EstadoItemChecklist.ARCHIVADO)
+    )
+
+
+def test_archivar_ambos_planos_dispara_solicitud_de_anticipo1(db_session):
+    project = _make_project(db_session)
+    _aprobar_planos(db_session, project)
+
+    detail = project_service.get_project_detail(db_session, project.crp_code, Rol.ADMINISTRATIVO)
+    assert any("Planos aprobados. Solicitar Anticipo 1" in e.mensaje for e in detail.linea_de_tiempo)
+
+
+def test_archivar_un_solo_plano_no_dispara_la_solicitud(db_session):
+    project = _make_project(db_session)
+    project_service.update_checklist_item(
+        db_session, Rol.IMPORTACIONES, project.crp_code, "1", ChecklistItemUpdate(estado=EstadoItemChecklist.ARCHIVADO)
+    )
+
+    detail = project_service.get_project_detail(db_session, project.crp_code, Rol.ADMINISTRATIVO)
+    assert not any("Solicitar Anticipo 1" in e.mensaje for e in detail.linea_de_tiempo)
+
+
+def test_confirmar_solicitud_anticipo1(db_session):
+    project = _make_project(db_session)
+    _aprobar_planos(db_session, project)
+
+    updated = financiero_service.confirmar_solicitud_anticipo1(db_session, ADMIN_FINANCIERO, project.crp_code)
+
+    assert updated.anticipo1_solicitud_confirmada is True
+    detail = project_service.get_project_detail(db_session, project.crp_code, Rol.ADMINISTRATIVO)
+    assert any("confirmado por" in e.mensaje for e in detail.linea_de_tiempo)
+
+
+def test_confirmar_solicitud_sin_planos_aprobados_lanza_error(db_session):
+    project = _make_project(db_session)
+    with pytest.raises(financiero_service.PlanosNoAprobadosError):
+        financiero_service.confirmar_solicitud_anticipo1(db_session, ADMIN_FINANCIERO, project.crp_code)
+
+
+def test_confirmar_solicitud_dos_veces_lanza_error(db_session):
+    project = _make_project(db_session)
+    _aprobar_planos(db_session, project)
+    financiero_service.confirmar_solicitud_anticipo1(db_session, ADMIN_FINANCIERO, project.crp_code)
+
+    with pytest.raises(financiero_service.SolicitudYaConfirmadaError):
+        financiero_service.confirmar_solicitud_anticipo1(db_session, ADMIN_FINANCIERO, project.crp_code)
+
+
+def test_confirmar_solicitud_otro_rol_lanza_forbidden(db_session):
+    project = _make_project(db_session)
+    _aprobar_planos(db_session, project)
+
+    with pytest.raises(project_service.ForbiddenError):
+        financiero_service.confirmar_solicitud_anticipo1(db_session, OTRO_ROL, project.crp_code)

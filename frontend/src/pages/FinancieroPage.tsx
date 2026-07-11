@@ -41,6 +41,8 @@ type Tablero = {
   margen_bruto: number | null;
   semaforo_pago: "VERDE" | "AMARILLO" | "ROJO";
   tasas_cambio: TasaCambio[];
+  planos_aprobados_fecha: string | null;
+  anticipo1_solicitud_confirmada: boolean;
 };
 
 const SEMAFORO_LABELS: Record<Tablero["semaforo_pago"], string> = {
@@ -208,6 +210,26 @@ export default function FinancieroPage() {
       setConfigError(err instanceof ApiError ? err.message : "No se pudo configurar el esquema de pagos");
     } finally {
       setConfigSaving(false);
+    }
+  }
+
+  const [confirmandoAnticipo1, setConfirmandoAnticipo1] = useState(false);
+  const [anticipo1Error, setAnticipo1Error] = useState<string | null>(null);
+
+  async function handleConfirmarSolicitudAnticipo1() {
+    if (!selected) return;
+    setAnticipo1Error(null);
+    setConfirmandoAnticipo1(true);
+    try {
+      const updated = await projectsApiFetch<Tablero>(
+        `/projects/${encodeURIComponent(selected.crp_code)}/anticipo1/confirmar-solicitud`,
+        { method: "POST", token }
+      );
+      setTablero(updated);
+    } catch (err) {
+      setAnticipo1Error(err instanceof ApiError ? err.message : "No se pudo confirmar la solicitud");
+    } finally {
+      setConfirmandoAnticipo1(false);
     }
   }
 
@@ -438,6 +460,32 @@ export default function FinancieroPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {tablero && tablero.planos_aprobados_fecha && (
+                <div className="alert alert-success" style={{ marginBottom: 16 }}>
+                  Planos aprobados el {new Date(tablero.planos_aprobados_fecha).toLocaleDateString("es-CO")}. Se
+                  disparó la solicitud de Anticipo 1.
+                  {tablero.anticipo1_solicitud_confirmada ? (
+                    <span className="badge badge-status-activo" style={{ marginLeft: 10 }}>
+                      Solicitud confirmada
+                    </span>
+                  ) : (
+                    <button
+                      className="btn-primary"
+                      style={{ marginLeft: 10 }}
+                      disabled={confirmandoAnticipo1}
+                      onClick={handleConfirmarSolicitudAnticipo1}
+                    >
+                      {confirmandoAnticipo1 ? "Confirmando..." : "Confirmar solicitud enviada"}
+                    </button>
+                  )}
+                  {anticipo1Error && (
+                    <div className="alert alert-error" style={{ marginTop: 8 }}>
+                      {anticipo1Error}
+                    </div>
+                  )}
                 </div>
               )}
 

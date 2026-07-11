@@ -72,6 +72,9 @@ class Project(Base):
 
     # E7-H5: fecha de aprobación de planos, dispara la solicitud de Anticipo 1.
     planos_aprobados_fecha: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    # E7-H5: confirmación manual del Administrador de que la solicitud de
+    # Anticipo 1 ya fue enviada al cliente (queda en la línea de tiempo).
+    anticipo1_solicitud_confirmada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     module_statuses: Mapped[list["ProjectModuleStatus"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ProjectModuleStatus.modulo"

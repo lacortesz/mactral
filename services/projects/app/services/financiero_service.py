@@ -38,6 +38,14 @@ class CuotasYaConfiguradasError(Exception):
     pass
 
 
+class PlanosNoAprobadosError(Exception):
+    pass
+
+
+class SolicitudYaConfirmadaError(Exception):
+    pass
+
+
 def evaluar_alertas_cuotas(db: Session, project: Project) -> None:
     """E7-H4: alerta de cuotas próximas a vencer (7 días) o ya vencidas.
     Se evalúa en cada lectura del proyecto (no hay job diario corriendo
@@ -153,6 +161,33 @@ def registrar_pago(db: Session, actor: Actor, crp_code: str, numero: int, data: 
     return cuota
 
 
+def confirmar_solicitud_anticipo1(db: Session, actor: Actor, crp_code: str) -> Project:
+    """E7-H5: confirmación manual del Administrador de que la solicitud de
+    Anticipo 1 (disparada automáticamente al aprobarse los planos) ya fue
+    enviada al cliente. Se registra en la línea de tiempo una sola vez."""
+    if not can_manage_financiero(actor.role):
+        raise ForbiddenError("Solo Administrativo (Financiero) o Gerencia pueden confirmar la solicitud.")
+
+    project = get_project_by_code(db, crp_code)
+    if project.planos_aprobados_fecha is None:
+        raise PlanosNoAprobadosError("Los planos de este proyecto aún no han sido aprobados.")
+    if project.anticipo1_solicitud_confirmada:
+        raise SolicitudYaConfirmadaError("La solicitud de Anticipo 1 ya fue confirmada.")
+
+    project.anticipo1_solicitud_confirmada = True
+    db.add(
+        ProjectEvent(
+            project_id=project.id,
+            fecha=datetime.utcnow(),
+            origen="Financiero",
+            mensaje=f"Anticipo 1 solicitado al cliente — confirmado por {actor.name}",
+        )
+    )
+    db.commit()
+    db.refresh(project)
+    return project
+
+
 def get_tablero(db: Session, crp_code: str) -> TableroFinancieroOut:
     """E7-H2: valor del contrato, desglose de cuotas, costos ya modelados
     (fabricación + gastos logísticos de E8-H1/E7-H3) y margen bruto."""
@@ -178,6 +213,8 @@ def get_tablero(db: Session, crp_code: str) -> TableroFinancieroOut:
         semaforo_pago=calcular_semaforo_pago(project.cuotas),
         cuotas=project.cuotas,
         tasas_cambio=[TasaCambioOut(moneda=m, tasa_cop=t) for m, t in TASAS_CAMBIO_REFERENCIA.items()],
+        planos_aprobados_fecha=project.planos_aprobados_fecha,
+        anticipo1_solicitud_confirmada=project.anticipo1_solicitud_confirmada,
     )
 
 

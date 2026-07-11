@@ -91,3 +91,27 @@ def registrar_pago(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except financiero_service.CuotaNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+anticipo1_router = APIRouter(
+    prefix="/projects/{crp_code}/anticipo1/confirmar-solicitud", tags=["financiero"]
+)
+
+
+@anticipo1_router.post("", response_model=TableroFinancieroOut)
+def confirmar_solicitud_anticipo1(
+    crp_code: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        financiero_service.confirmar_solicitud_anticipo1(db, current_user, crp_code)
+        return financiero_service.get_tablero(db, crp_code)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except project_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except financiero_service.PlanosNoAprobadosError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except financiero_service.SolicitudYaConfirmadaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
