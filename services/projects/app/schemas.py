@@ -249,6 +249,44 @@ class ComentarioOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SemaforoConteoOut(BaseModel):
+    color: SemaforoColor
+    cantidad: int
+
+
+class EtapaConteoOut(BaseModel):
+    etapa: EstadoEtapa
+    cantidad: int
+
+
+class DashboardOut(BaseModel):
+    """E10-H1: dashboard global de proyectos activos."""
+
+    total_activos: int
+    total_entregados: int
+    por_semaforo: list[SemaforoConteoOut]
+    por_etapa: list[EtapaConteoOut]
+    proyectos: list[ProjectSearchResult]
+
+
+class RentabilidadProyectoOut(BaseModel):
+    """E10-H2: vista gerencial de rentabilidad por proyecto."""
+
+    crp_code: str
+    cliente: str
+    valor_contrato: int
+    costo_fabricacion: int
+    gastos_logisticos_cop: float
+    margen_bruto: float
+    margen_pct: float
+
+
+class RentabilidadOut(BaseModel):
+    proyectos: list[RentabilidadProyectoOut]
+    margen_bruto_total: float
+    valor_contrato_total: int
+
+
 class NotificacionOut(BaseModel):
     """E9-H2: bandeja de notificaciones — asignación e inactividad."""
 
