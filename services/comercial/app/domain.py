@@ -31,6 +31,15 @@ class TipoPago(str, Enum):
     CREDITO = "CREDITO"
 
 
+# E2-H4: clasificación al marcar un lead como Vendido. La generación de
+# códigos (GM26-XX / STMB26-XX / STIN26-XX) se implementa en E2-H4; aquí solo
+# se define el catálogo porque E2-H3 ya necesita pedirla al cerrar la venta.
+class TipoClasificacion(str, Enum):
+    GM = "GM"
+    STOCK_MOBILITY = "STOCK_MOBILITY"
+    STOCK_INDUSTRY = "STOCK_INDUSTRY"
+
+
 LEAD_CODE_PREFIX: dict[LineaNegocio, str] = {
     LineaNegocio.MOBILITY: "MOB",
     LineaNegocio.INDUSTRY: "IND",

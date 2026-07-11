@@ -88,3 +88,12 @@ export const TIPO_PAGO_LABELS: Record<TipoPago, string> = {
   CONTADO: "Contado",
   CREDITO: "Crédito",
 };
+
+// E2-H4: clasificación que se pide al marcar el lead como Vendido (E2-H3).
+export type TipoClasificacion = "GM" | "STOCK_MOBILITY" | "STOCK_INDUSTRY";
+
+export const TIPO_CLASIFICACION_LABELS: Record<TipoClasificacion, string> = {
+  GM: "GM (Registro Maestro)",
+  STOCK_MOBILITY: "Stock — Mobility",
+  STOCK_INDUSTRY: "Stock — Industry",
+};

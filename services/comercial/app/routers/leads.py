@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import CurrentUser, require_comercial_module
 from app.schemas import (
+    EstadoChange,
     InteractionCreate,
     InteractionOut,
     LeadCreate,
@@ -12,7 +13,7 @@ from app.schemas import (
     QuotationCreate,
     QuotationOut,
 )
-from app.services import lead_service, quotation_service
+from app.services import estado_service, lead_service, quotation_service
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -62,6 +63,23 @@ def add_interaction(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except lead_service.ForbiddenError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.patch("/{lead_id}/estado", response_model=LeadDetailOut)
+def change_estado(
+    lead_id: str,
+    payload: EstadoChange,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_comercial_module),
+):
+    try:
+        return estado_service.change_estado(db, current_user, lead_id, payload)
+    except lead_service.LeadNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except estado_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except estado_service.InvalidTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 
 @router.post(
