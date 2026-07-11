@@ -4,7 +4,16 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.domain import CHECKLIST_ITEMS, EstadoEtapa, Rol, SemaforoColor, can_edit_checklist, editable_modules
+from app.domain import (
+    CHECKLIST_ITEMS,
+    NUMERO_ITEM_BL,
+    EstadoEtapa,
+    EstadoItemChecklist,
+    Rol,
+    SemaforoColor,
+    can_edit_checklist,
+    editable_modules,
+)
 from app.models import ImportChecklistItem, Project, ProjectCounter, ProjectEvent, ProjectModuleStatus
 from app.schemas import (
     ChecklistItemOut,
@@ -198,6 +207,32 @@ def update_checklist_item(
     if adjunto_bytes is not None:
         item.adjunto_bytes = adjunto_bytes
         item.adjunto_nombre = adjunto_nombre
+
+    # E4-H2: archivar el BL/guía aérea dispara automáticamente la solicitud
+    # de Anticipo 2 a Financiero, una sola vez por proyecto.
+    if (
+        numero == NUMERO_ITEM_BL
+        and data.estado == EstadoItemChecklist.ARCHIVADO
+        and not project.notificado_anticipo2
+    ):
+        now = datetime.utcnow()
+        db.add(
+            ProjectEvent(
+                project_id=project.id,
+                fecha=now,
+                origen="Sistema",
+                mensaje=f"Proyecto {project.crp_code} — BL recibido. Solicitar Anticipo 2",
+            )
+        )
+        db.add(
+            ProjectEvent(
+                project_id=project.id,
+                fecha=now,
+                origen="Sistema",
+                mensaje="Correo enviado al Administrador notificando la solicitud de Anticipo 2",
+            )
+        )
+        project.notificado_anticipo2 = True
 
     db.commit()
     db.refresh(item)
