@@ -15,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.domain import EstadoLead, LineaNegocio, TipoClasificacion, TipoPago
+from app.domain import EstadoLead, LineaNegocio, TipoClasificacion, TipoMovimientoStock, TipoPago
 
 
 def _values(enum_cls):
@@ -138,8 +138,9 @@ class Quotation(Base):
 
 
 class StockItem(Base):
-    """E2-H4 (prep de Épica 6): disponibilidad de unidades por línea de
-    negocio y tipo de producto, para la clasificación Stock al cerrar venta."""
+    """E2-H4/E6-H1: inventario disponible por línea de negocio y referencia
+    (tipo_producto), para la clasificación Stock al cerrar venta y el
+    registro manual de entradas por Bodega/Administrador."""
 
     __tablename__ = "stock_items"
     __table_args__ = (UniqueConstraint("linea_negocio", "tipo_producto", name="uq_stock_item"),)
@@ -149,7 +150,40 @@ class StockItem(Base):
         SAEnum(LineaNegocio, name="linea_negocio_comercial", values_callable=_values), nullable=False
     )
     tipo_producto: Mapped[str] = mapped_column(String(255), nullable=False)
+    nombre: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    descripcion: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    unidad: Mapped[str] = mapped_column(String(32), nullable=False, default="unidad")
+    cantidad_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cantidad_disponible: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    movimientos: Mapped[list["StockMovement"]] = relationship(
+        back_populates="item", cascade="all, delete-orphan", order_by="StockMovement.fecha"
+    )
+
+    @property
+    def ultimo_movimiento(self) -> "StockMovement | None":
+        return self.movimientos[-1] if self.movimientos else None
+
+
+class StockMovement(Base):
+    """E6-H1/E6-H2: historial de entradas (manuales) y salidas (automáticas
+    al confirmar una venta Stock) de cada referencia."""
+
+    __tablename__ = "stock_movements"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    stock_item_id: Mapped[str] = mapped_column(ForeignKey("stock_items.id"), nullable=False)
+    tipo: Mapped[TipoMovimientoStock] = mapped_column(
+        SAEnum(TipoMovimientoStock, name="tipo_movimiento_stock", values_callable=_values), nullable=False
+    )
+    cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
+    fecha: Mapped[datetime] = mapped_column(DateTime(), default=datetime.utcnow)
+    usuario_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    usuario_nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    referencia_crp: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    item: Mapped["StockItem"] = relationship(back_populates="movimientos")
 
 
 class EstadoHistorial(Base):

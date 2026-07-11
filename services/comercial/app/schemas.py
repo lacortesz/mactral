@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, model_validator
 
-from app.domain import EstadoLead, LineaNegocio, TipoClasificacion, TipoPago
+from app.domain import EstadoLead, LineaNegocio, TipoClasificacion, TipoMovimientoStock, TipoPago
 
 REQUIRED_FIELDS_MESSAGE = "Completa los campos requeridos"
 
@@ -144,4 +144,48 @@ class InteractionCreate(BaseModel):
     def check_required(self):
         if not (self.canal and self.canal.strip()) or not (self.resumen and self.resumen.strip()):
             raise ValueError(REQUIRED_FIELDS_MESSAGE)
+        return self
+
+
+# --- E6-H1/E6-H2: inventario (módulo Stock) ---------------------------------
+
+
+class StockMovementOut(BaseModel):
+    tipo: TipoMovimientoStock
+    cantidad: int
+    fecha: datetime
+    usuario_nombre: str
+    referencia_crp: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class StockItemOut(BaseModel):
+    id: str
+    linea_negocio: LineaNegocio
+    tipo_producto: str
+    nombre: str | None
+    descripcion: str | None
+    color: str | None
+    unidad: str
+    cantidad_total: int
+    cantidad_disponible: int
+    ultimo_movimiento: StockMovementOut | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class StockEntryCreate(BaseModel):
+    linea_negocio: LineaNegocio
+    tipo_producto: str
+    cantidad: int
+    nombre: str | None = None
+    descripcion: str | None = None
+    color: str | None = None
+    unidad: str = "unidad"
+
+    @model_validator(mode="after")
+    def check_cantidad_positiva(self):
+        if self.cantidad <= 0:
+            raise ValueError("La cantidad debe ser mayor a cero")
         return self

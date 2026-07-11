@@ -48,6 +48,7 @@ const DEDICATED_MODULE_ROUTES: Partial<Record<ModuleKey, string>> = {
   comercial: "/comercial",
   importaciones: "/importaciones",
   tecnico: "/tecnico",
+  stock: "/stock",
 };
 
 export function moduleRoute(m: ModuleKey): string {

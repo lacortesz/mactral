@@ -9,6 +9,7 @@ import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
 import RegMaestroPage from "./pages/RegMaestroPage";
 import SetPasswordPage from "./pages/SetPasswordPage";
+import StockPage from "./pages/StockPage";
 import TecnicoPage from "./pages/TecnicoPage";
 import UsuariosPage from "./pages/UsuariosPage";
 
@@ -70,6 +71,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <TecnicoPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stock"
+        element={
+          <ProtectedRoute>
+            <StockPage />
           </ProtectedRoute>
         }
       />
