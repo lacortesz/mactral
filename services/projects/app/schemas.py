@@ -132,12 +132,20 @@ class InstallationReprogrammingOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ActaEntregaCreate(BaseModel):
+    fecha_real_entrega: date
+    observaciones: str | None = None
+
+
 class InstallationOut(BaseModel):
     fecha_instalacion: date
     tecnico_nombre: str
     ciudad: str
     estado: EstadoInstalacion
     historial: list[InstallationReprogrammingOut] = []
+    fecha_real_entrega: date | None = None
+    tiene_acta: bool = False
+    observaciones: str | None = None
 
     model_config = {"from_attributes": True}
 

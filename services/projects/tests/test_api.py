@@ -437,3 +437,92 @@ def test_otro_rol_no_puede_programar_instalacion_via_api(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
+
+
+def test_registrar_acta_con_adjunto_via_api(client):
+    token = _token("COMERCIAL")
+    token_tecnico = _token("TECNICO")
+    created = client.post(
+        "/projects", json=STOCK_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/projects/{created['crp_code']}/instalacion",
+        json={
+            "fecha_instalacion": "2026-08-01",
+            "tecnico_id": "u1",
+            "tecnico_nombre": "Andrés Pérez",
+            "ciudad": "Barranquilla",
+        },
+        headers={"Authorization": f"Bearer {token_tecnico}"},
+    )
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/instalacion/acta",
+        data={"fecha_real_entrega": "2026-08-01", "observaciones": "Sin novedad"},
+        files={"acta": ("acta.pdf", b"%PDF-fake-acta", "application/pdf")},
+        headers={"Authorization": f"Bearer {token_tecnico}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["estado"] == "COMPLETADO"
+    assert body["tiene_acta"] is True
+
+    detail = client.get(
+        f"/projects/{created['crp_code']}", headers={"Authorization": f"Bearer {token_tecnico}"}
+    ).json()
+    assert detail["etapa_actual"] == "ENTREGADO"
+
+    download = client.get(
+        f"/projects/{created['crp_code']}/instalacion/acta", headers={"Authorization": f"Bearer {token_tecnico}"}
+    )
+    assert download.status_code == 200
+    assert download.content == b"%PDF-fake-acta"
+
+
+def test_registrar_acta_sin_adjunto_no_bloquea_via_api(client):
+    token = _token("COMERCIAL")
+    token_tecnico = _token("TECNICO")
+    created = client.post(
+        "/projects", json=STOCK_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/projects/{created['crp_code']}/instalacion",
+        json={
+            "fecha_instalacion": "2026-08-01",
+            "tecnico_id": "u1",
+            "tecnico_nombre": "Andrés Pérez",
+            "ciudad": "Barranquilla",
+        },
+        headers={"Authorization": f"Bearer {token_tecnico}"},
+    )
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/instalacion/acta",
+        data={"fecha_real_entrega": "2026-08-01"},
+        headers={"Authorization": f"Bearer {token_tecnico}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["tiene_acta"] is False
+
+
+def test_descargar_acta_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    token_tecnico = _token("TECNICO")
+    created = client.post(
+        "/projects", json=STOCK_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/projects/{created['crp_code']}/instalacion",
+        json={
+            "fecha_instalacion": "2026-08-01",
+            "tecnico_id": "u1",
+            "tecnico_nombre": "Andrés Pérez",
+            "ciudad": "Barranquilla",
+        },
+        headers={"Authorization": f"Bearer {token_tecnico}"},
+    )
+
+    response = client.get(
+        f"/projects/{created['crp_code']}/instalacion/acta", headers={"Authorization": f"Bearer {token_tecnico}"}
+    )
+    assert response.status_code == 404

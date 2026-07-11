@@ -5,6 +5,7 @@ from app.database import get_db
 from app.dependencies import CurrentUser, get_current_user
 from app.domain import EstadoItemChecklist
 from app.schemas import (
+    ActaEntregaCreate,
     ChecklistItemOut,
     ChecklistItemUpdate,
     EnviarTecnicoIn,
@@ -164,3 +165,55 @@ def reprogramar_instalacion(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except installation_service.InvalidInstallationDateError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.patch("/{crp_code}/instalacion/acta", response_model=InstallationOut)
+async def registrar_acta(
+    crp_code: str,
+    fecha_real_entrega: str = Form(...),
+    observaciones: str | None = Form(None),
+    acta: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        payload = ActaEntregaCreate(fecha_real_entrega=fecha_real_entrega, observaciones=observaciones)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    acta_bytes = await acta.read() if acta is not None else None
+    acta_nombre = acta.filename if acta is not None else None
+
+    try:
+        return installation_service.registrar_acta(
+            db, current_user, crp_code, payload, acta_bytes, acta_nombre
+        )
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except project_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except installation_service.InstallationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/{crp_code}/instalacion/acta")
+def get_acta_attachment(
+    crp_code: str,
+    db: Session = Depends(get_db),
+    _current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        installation = installation_service.get_acta_attachment(db, crp_code)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except installation_service.InstallationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    if installation.acta_bytes is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El acta no ha sido adjuntada")
+
+    return Response(
+        content=installation.acta_bytes,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{installation.acta_nombre or "acta"}"'},
+    )
