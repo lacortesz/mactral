@@ -314,3 +314,67 @@ def test_filtrar_cuentas_por_pagar_por_proyecto_y_moneda(db_session):
 def test_otro_rol_no_puede_ver_cuentas_por_pagar(db_session):
     with pytest.raises(project_service.ForbiddenError):
         financiero_service.list_cuentas_por_pagar(db_session, OTRO_ROL)
+
+
+# E7-H4: alertas de cuotas próximas a vencer.
+def test_alerta_cuota_proxima_a_vencer(db_session):
+    project = _make_project(db_session)
+    proxima = CuotasConfigCreate(
+        valor_contrato=10_000,
+        cuotas=[
+            CuotaIn(
+                numero=1,
+                etiqueta="Anticipo 1",
+                monto=10_000,
+                porcentaje=100,
+                fecha_vencimiento=date.today() + timedelta(days=3),
+            )
+        ],
+    )
+    financiero_service.configurar_cuotas(db_session, ADMIN_FINANCIERO, project.crp_code, proxima)
+
+    cuotas = financiero_service.list_cuotas(db_session, project.crp_code)
+
+    assert cuotas[0].alertada_proxima is True
+    detail = project_service.get_project_detail(db_session, project.crp_code, Rol.ADMINISTRATIVO)
+    assert any("vence el" in e.mensaje for e in detail.linea_de_tiempo)
+
+
+def test_alerta_cuota_vencida(db_session):
+    project = _make_project(db_session)
+    vencidas = CuotasConfigCreate(
+        valor_contrato=10_000,
+        cuotas=[CuotaIn(numero=1, etiqueta="Anticipo 1", monto=10_000, porcentaje=100, fecha_vencimiento=date(2020, 1, 1))],
+    )
+    financiero_service.configurar_cuotas(db_session, ADMIN_FINANCIERO, project.crp_code, vencidas)
+
+    cuotas = financiero_service.list_cuotas(db_session, project.crp_code)
+
+    assert cuotas[0].alertada_vencida is True
+    detail = project_service.get_project_detail(db_session, project.crp_code, Rol.ADMINISTRATIVO)
+    assert any("vencida" in e.mensaje for e in detail.linea_de_tiempo)
+
+
+def test_alerta_no_se_duplica_en_lecturas_sucesivas(db_session):
+    project = _make_project(db_session)
+    vencidas = CuotasConfigCreate(
+        valor_contrato=10_000,
+        cuotas=[CuotaIn(numero=1, etiqueta="Anticipo 1", monto=10_000, porcentaje=100, fecha_vencimiento=date(2020, 1, 1))],
+    )
+    financiero_service.configurar_cuotas(db_session, ADMIN_FINANCIERO, project.crp_code, vencidas)
+
+    financiero_service.list_cuotas(db_session, project.crp_code)
+    financiero_service.list_cuotas(db_session, project.crp_code)
+
+    detail = project_service.get_project_detail(db_session, project.crp_code, Rol.ADMINISTRATIVO)
+    alertas = [e for e in detail.linea_de_tiempo if "vencida" in e.mensaje]
+    assert len(alertas) == 1
+
+
+def test_cuota_lejana_no_genera_alerta(db_session):
+    project = _make_project(db_session)
+    financiero_service.configurar_cuotas(db_session, ADMIN_FINANCIERO, project.crp_code, CUOTAS_VALIDAS)
+
+    cuotas = financiero_service.list_cuotas(db_session, project.crp_code)
+
+    assert all(not c.alertada_proxima and not c.alertada_vencida for c in cuotas)

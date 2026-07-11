@@ -1,5 +1,5 @@
 """E7-H1: definición de cuotas/anticipos y registro de pagos por proyecto."""
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Protocol
 
 from sqlalchemy.orm import Session
@@ -38,8 +38,47 @@ class CuotasYaConfiguradasError(Exception):
     pass
 
 
+def evaluar_alertas_cuotas(db: Session, project: Project) -> None:
+    """E7-H4: alerta de cuotas próximas a vencer (7 días) o ya vencidas.
+    Se evalúa en cada lectura del proyecto (no hay job diario corriendo
+    aparte, mismo patrón que el semáforo de entrega de E5-H3) y usa los
+    flags alertada_proxima/alertada_vencida para no duplicar el evento."""
+    hoy = date.today()
+    cambios = False
+    for cuota in project.cuotas:
+        if cuota.estado != EstadoCuota.PENDIENTE:
+            continue
+        if cuota.fecha_vencimiento < hoy and not cuota.alertada_vencida:
+            cuota.alertada_vencida = True
+            db.add(
+                ProjectEvent(
+                    project_id=project.id,
+                    fecha=datetime.utcnow(),
+                    origen="Financiero",
+                    mensaje=f"Alerta: {cuota.etiqueta} vencida (venció el {cuota.fecha_vencimiento.isoformat()})",
+                )
+            )
+            cambios = True
+        elif cuota.fecha_vencimiento <= hoy + timedelta(days=7) and not cuota.alertada_proxima:
+            cuota.alertada_proxima = True
+            db.add(
+                ProjectEvent(
+                    project_id=project.id,
+                    fecha=datetime.utcnow(),
+                    origen="Financiero",
+                    mensaje=f"Alerta: {cuota.etiqueta} vence el {cuota.fecha_vencimiento.isoformat()}",
+                )
+            )
+            cambios = True
+
+    if cambios:
+        db.commit()
+        db.refresh(project)
+
+
 def list_cuotas(db: Session, crp_code: str) -> list[Cuota]:
     project = get_project_by_code(db, crp_code)
+    evaluar_alertas_cuotas(db, project)
     return project.cuotas
 
 
@@ -118,6 +157,7 @@ def get_tablero(db: Session, crp_code: str) -> TableroFinancieroOut:
     """E7-H2: valor del contrato, desglose de cuotas, costos ya modelados
     (fabricación + gastos logísticos de E8-H1/E7-H3) y margen bruto."""
     project = get_project_by_code(db, crp_code)
+    evaluar_alertas_cuotas(db, project)
 
     total_cobrado = sum(c.monto_pagado or 0 for c in project.cuotas if c.estado == EstadoCuota.PAGADO)
     total_por_cobrar = sum(c.monto for c in project.cuotas if c.estado == EstadoCuota.PENDIENTE)

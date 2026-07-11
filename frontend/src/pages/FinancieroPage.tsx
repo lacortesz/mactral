@@ -21,6 +21,8 @@ type Cuota = {
   fecha_pago: string | null;
   monto_pagado: number | null;
   referencia_bancaria: string | null;
+  alertada_proxima: boolean;
+  alertada_vencida: boolean;
 };
 
 type ProjectDetail = {
@@ -180,7 +182,7 @@ export default function FinancieroPage() {
         porcentaje: Number(f.porcentaje),
         fecha_vencimiento: f.fecha_vencimiento,
       }));
-      const created = await projectsApiFetch<Cuota[]>(`/projects/${encodeURIComponent(selected.crp_code)}/cuotas`, {
+      await projectsApiFetch<Cuota[]>(`/projects/${encodeURIComponent(selected.crp_code)}/cuotas`, {
         method: "POST",
         token,
         body: {
@@ -189,7 +191,14 @@ export default function FinancieroPage() {
           cuotas: cuotasPayload,
         },
       });
-      setCuotas(created);
+      // E7-H4: list_cuotas recalcula las alertas de vencimiento en cada
+      // lectura; se recarga por GET (no se usa la respuesta del POST) para
+      // que los badges de alerta reflejen el estado ya evaluado.
+      const refreshed = await projectsApiFetch<Cuota[]>(
+        `/projects/${encodeURIComponent(selected.crp_code)}/cuotas`,
+        { token, method: "GET" }
+      );
+      setCuotas(refreshed);
       const tableroFound = await projectsApiFetch<Tablero>(
         `/projects/${encodeURIComponent(selected.crp_code)}/tablero-financiero`,
         { token }
@@ -456,6 +465,16 @@ export default function FinancieroPage() {
                         <span className={`badge ${c.estado === "PAGADO" ? "badge-status-activo" : "badge-role"}`}>
                           {c.estado === "PAGADO" ? "Pagado" : "Pendiente"}
                         </span>
+                        {c.estado === "PENDIENTE" && c.alertada_vencida && (
+                          <span className="badge badge-status-inactivo" style={{ marginLeft: 6 }}>
+                            Vencida
+                          </span>
+                        )}
+                        {c.estado === "PENDIENTE" && !c.alertada_vencida && c.alertada_proxima && (
+                          <span className="badge badge-role" style={{ marginLeft: 6 }}>
+                            Por vencer
+                          </span>
+                        )}
                       </td>
                       <td>
                         {c.estado === "PENDIENTE" && (
