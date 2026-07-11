@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, model_validator
 
-from app.domain import EstadoLead, LineaNegocio
+from app.domain import EstadoLead, LineaNegocio, TipoPago
 
 REQUIRED_FIELDS_MESSAGE = "Completa los campos requeridos"
 
@@ -56,6 +56,40 @@ class InteractionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class QuotationCreate(BaseModel):
+    valor_equipo: int
+    tipo_pago: TipoPago
+    anticipo_inicial_pct: int
+    segundo_anticipo_pct: int
+    saldo_final_pct: int
+    fecha_estimada_entrega: date
+
+    @model_validator(mode="after")
+    def check_values(self):
+        # Restricción E2-H2: la calculadora usa el formato oficial, no es
+        # texto libre — el desglose siempre debe sumar el 100% del contrato.
+        if self.valor_equipo <= 0:
+            raise ValueError("El valor del equipo debe ser mayor a cero")
+        total_pct = self.anticipo_inicial_pct + self.segundo_anticipo_pct + self.saldo_final_pct
+        if total_pct != 100:
+            raise ValueError("Los porcentajes de anticipo deben sumar 100%")
+        return self
+
+
+class QuotationOut(BaseModel):
+    version: int
+    numero_cotizacion: str
+    valor_equipo: int
+    tipo_pago: TipoPago
+    anticipo_inicial_pct: int
+    segundo_anticipo_pct: int
+    saldo_final_pct: int
+    fecha_estimada_entrega: date
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class LeadDetailOut(BaseModel):
     id: str
     codigo: str
@@ -72,6 +106,7 @@ class LeadDetailOut(BaseModel):
     vendedor_nombre: str
     created_at: datetime
     interacciones: list[InteractionOut]
+    cotizaciones: list[QuotationOut] = []
 
     model_config = {"from_attributes": True}
 

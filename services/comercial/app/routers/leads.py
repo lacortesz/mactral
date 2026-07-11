@@ -1,10 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import CurrentUser, require_comercial_module
-from app.schemas import InteractionCreate, InteractionOut, LeadCreate, LeadDetailOut, LeadListItem
-from app.services import lead_service
+from app.schemas import (
+    InteractionCreate,
+    InteractionOut,
+    LeadCreate,
+    LeadDetailOut,
+    LeadListItem,
+    QuotationCreate,
+    QuotationOut,
+)
+from app.services import lead_service, quotation_service
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -54,3 +62,55 @@ def add_interaction(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except lead_service.ForbiddenError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{lead_id}/quotations", response_model=QuotationOut, status_code=status.HTTP_201_CREATED
+)
+def create_quotation(
+    lead_id: str,
+    payload: QuotationCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_comercial_module),
+):
+    try:
+        return quotation_service.create_quotation(db, current_user, lead_id, payload)
+    except lead_service.LeadNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except lead_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.get("/{lead_id}/quotations", response_model=list[QuotationOut])
+def list_quotations(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    _current_user: CurrentUser = Depends(require_comercial_module),
+):
+    try:
+        return quotation_service.list_quotations(db, lead_id)
+    except lead_service.LeadNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/{lead_id}/quotations/{version}/pdf")
+def get_quotation_pdf(
+    lead_id: str,
+    version: int,
+    db: Session = Depends(get_db),
+    _current_user: CurrentUser = Depends(require_comercial_module),
+):
+    try:
+        quotation = quotation_service.get_quotation_pdf(db, lead_id, version)
+    except lead_service.LeadNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except quotation_service.QuotationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return Response(
+        content=quotation.pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{quotation.numero_cotizacion}.pdf"'
+        },
+    )

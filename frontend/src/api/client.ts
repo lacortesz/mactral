@@ -69,6 +69,21 @@ export function comercialApiFetch<T>(path: string, opts: FetchOptions = {}): Pro
   return doFetch<T>(COMERCIAL_API_BASE_URL, path, opts);
 }
 
+// E2-H2: descarga binaria (PDF de la cotización) — un <a href> normal no
+// puede mandar el header Authorization, así que se trae como blob y se
+// abre con una URL de objeto local.
+export async function comercialFetchBlob(path: string, token: string | null): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${COMERCIAL_API_BASE_URL}${path}`, { headers });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new ApiError(response.status, data, extractMessage(response.status, data));
+  }
+  return response.blob();
+}
+
 export function retryAfterSeconds(error: ApiError): number | null {
   if (
     error.body &&

@@ -139,3 +139,119 @@ def test_lead_inexistente_devuelve_404(client):
     token = _token("COMERCIAL")
     response = client.get("/leads/no-existe", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404
+
+
+VALID_QUOTATION_PAYLOAD = {
+    "valor_equipo": 45_000_000,
+    "tipo_pago": "CONTADO",
+    "anticipo_inicial_pct": 50,
+    "segundo_anticipo_pct": 30,
+    "saldo_final_pct": 20,
+    "fecha_estimada_entrega": "2026-08-15",
+}
+
+
+def test_generar_cotizacion_devuelve_pdf_adjunto_y_cambia_estado(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/leads/{lead['id']}/quotations",
+        json=VALID_QUOTATION_PAYLOAD,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["version"] == 1
+    assert body["numero_cotizacion"] == f"{lead['codigo']}-v1"
+
+    detail = client.get(f"/leads/{lead['id']}", headers={"Authorization": f"Bearer {token}"}).json()
+    assert detail["estado"] == "ENVIADA"
+    assert len(detail["cotizaciones"]) == 1
+
+
+def test_porcentajes_que_no_suman_100_devuelve_422(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    payload = {**VALID_QUOTATION_PAYLOAD, "saldo_final_pct": 10}
+    response = client.post(
+        f"/leads/{lead['id']}/quotations",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+
+
+def test_descargar_pdf_de_la_cotizacion(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/leads/{lead['id']}/quotations",
+        json=VALID_QUOTATION_PAYLOAD,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = client.get(
+        f"/leads/{lead['id']}/quotations/1/pdf", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+
+
+def test_descargar_pdf_de_version_inexistente_devuelve_404(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.get(
+        f"/leads/{lead['id']}/quotations/1/pdf", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 404
+
+
+def test_regenerar_cotizacion_incrementa_version_via_api(client):
+    token = _token("COMERCIAL")
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/leads/{lead['id']}/quotations",
+        json=VALID_QUOTATION_PAYLOAD,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    segunda = client.post(
+        f"/leads/{lead['id']}/quotations",
+        json=VALID_QUOTATION_PAYLOAD,
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+    assert segunda["version"] == 2
+
+    historial = client.get(
+        f"/leads/{lead['id']}/quotations", headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    assert len(historial) == 2
+
+
+def test_otro_vendedor_no_puede_generar_cotizacion(client):
+    token_creador = _token("COMERCIAL", sub="u1", name="Carlos Martínez")
+    token_otro = _token("COMERCIAL", sub="u2", name="María Angulo")
+
+    lead = client.post(
+        "/leads", json=VALID_PAYLOAD, headers={"Authorization": f"Bearer {token_creador}"}
+    ).json()
+
+    response = client.post(
+        f"/leads/{lead['id']}/quotations",
+        json=VALID_QUOTATION_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_otro}"},
+    )
+    assert response.status_code == 403

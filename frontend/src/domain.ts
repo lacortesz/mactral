@@ -80,3 +80,11 @@ export const CANAL_ENTRADA_OPTIONS = [
   "Redes sociales",
   "Llamada entrante",
 ] as const;
+
+// E2-H2: catálogo de la calculadora oficial de cotizaciones.
+export type TipoPago = "CONTADO" | "CREDITO";
+
+export const TIPO_PAGO_LABELS: Record<TipoPago, string> = {
+  CONTADO: "Contado",
+  CREDITO: "Crédito",
+};
