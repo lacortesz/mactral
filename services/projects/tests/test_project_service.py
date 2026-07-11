@@ -185,3 +185,52 @@ def test_create_project_prefijos_distintos_llevan_contadores_independientes(db_s
 def test_create_project_prefijo_invalido_lanza_error():
     with pytest.raises(ValidationError, match="Prefijo inválido"):
         ProjectCreate(**{**GM_PAYLOAD.model_dump(), "crp_prefix": "XYZ"})
+
+
+# --- E3-H1: generación automática del código de proyecto -------------------
+# La lógica ya existe desde E2-H4 (_next_project_code, con SELECT ... FOR
+# UPDATE); estas pruebas documentan explícitamente los escenarios de E3-H1.
+
+
+# Escenario 1: generación de código GM.
+def test_e3h1_codigo_tiene_formato_prefijo_anio_consecutivo(db_session):
+    project = project_service.create_project(db_session, GM_PAYLOAD)
+
+    import re
+
+    assert re.fullmatch(r"GM\d{2}-\d{2}", project.crp_code)
+
+
+def test_e3h1_codigo_es_unico_por_prefijo(db_session):
+    codigos = {project_service.create_project(db_session, GM_PAYLOAD).crp_code for _ in range(5)}
+    assert len(codigos) == 5
+
+
+def test_e3h1_registro_maestro_queda_poblado_con_los_datos_del_lead(db_session):
+    project = project_service.create_project(db_session, GM_PAYLOAD)
+
+    assert project.cliente == GM_PAYLOAD.cliente
+    assert project.ciudad == GM_PAYLOAD.ciudad
+    assert project.producto == GM_PAYLOAD.producto
+    assert project.marca == GM_PAYLOAD.marca
+    assert project.tipo == GM_PAYLOAD.tipo
+
+
+# Escenario 2: concurrencia — dos ventas simultáneas no reciben el mismo
+# consecutivo. SQLite no soporta el mismo locking transaccional que Postgres
+# (donde corre en producción vía SELECT ... FOR UPDATE), así que aquí se
+# valida el efecto observable: consecutivos estrictamente secuenciales sin
+# huecos ni repeticiones al generar varios códigos seguidos.
+def test_e3h1_concurrencia_cada_venta_recibe_consecutivo_unico(db_session):
+    codigos = [project_service.create_project(db_session, GM_PAYLOAD).crp_code for _ in range(10)]
+    numeros = [int(c.split("-")[1]) for c in codigos]
+    assert numeros == list(range(1, 11))
+
+
+# Restricción: una vez generado, el código no se puede editar — no existe
+# ningún endpoint de actualización de crp_code (services/projects/app/routers
+# solo expone GET /projects/search, GET /projects/{crp_code} y POST
+# /projects); create_project tampoco acepta un crp_code explícito en el
+# payload (ProjectCreate no define ese campo).
+def test_e3h1_projectcreate_no_permite_fijar_el_codigo_manualmente():
+    assert "crp_code" not in ProjectCreate.model_fields
