@@ -3,6 +3,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { useAuth } from "./context/AuthContext";
 import ComercialPage from "./pages/ComercialPage";
 import DashboardPage from "./pages/DashboardPage";
+import FinancieroPage from "./pages/FinancieroPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ImportacionesPage from "./pages/ImportacionesPage";
 import LoginPage from "./pages/LoginPage";
@@ -79,6 +80,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <StockPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/financiero"
+        element={
+          <ProtectedRoute>
+            <FinancieroPage />
           </ProtectedRoute>
         }
       />
