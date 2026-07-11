@@ -335,3 +335,105 @@ def test_enviar_a_tecnico_con_ingreso_a_bodega_via_api(client):
     body = response.json()
     tecnico = next(m for m in body["modulos"] if m["modulo"] == "tecnico")
     assert tecnico["estado"] == "EN_CURSO"
+
+
+STOCK_CREATE_PAYLOAD = {
+    "crp_prefix": "STMB",
+    "tipo": "Stock - Mobility",
+    "cliente": "Residencias El Pinar",
+    "ciudad": "Pereira",
+    "producto": "SSE Recta",
+    "marca": "Stannah",
+    "modulos": [{"modulo": "tecnico", "estado": "EN_CURSO"}],
+    "evento_origen": "Comercial",
+    "evento_mensaje": "Venta cerrada",
+}
+
+
+def test_programar_instalacion_via_api(client):
+    token = _token("COMERCIAL")
+    token_tecnico = _token("TECNICO")
+    created = client.post(
+        "/projects", json=STOCK_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/instalacion",
+        json={
+            "fecha_instalacion": "2026-08-01",
+            "tecnico_id": "u1",
+            "tecnico_nombre": "Andrés Pérez",
+            "ciudad": "Barranquilla",
+        },
+        headers={"Authorization": f"Bearer {token_tecnico}"},
+    )
+    assert response.status_code == 201
+    assert response.json()["estado"] == "PROGRAMADO"
+
+
+def test_reprogramar_instalacion_via_api(client):
+    token = _token("COMERCIAL")
+    token_tecnico = _token("TECNICO")
+    created = client.post(
+        "/projects", json=STOCK_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    client.post(
+        f"/projects/{created['crp_code']}/instalacion",
+        json={
+            "fecha_instalacion": "2026-08-01",
+            "tecnico_id": "u1",
+            "tecnico_nombre": "Andrés Pérez",
+            "ciudad": "Barranquilla",
+        },
+        headers={"Authorization": f"Bearer {token_tecnico}"},
+    )
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/instalacion",
+        json={"fecha_instalacion": "2026-08-15", "motivo": "Cliente solicitó aplazar"},
+        headers={"Authorization": f"Bearer {token_tecnico}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["fecha_instalacion"] == "2026-08-15"
+    assert len(body["historial"]) == 1
+
+
+def test_programar_instalacion_duplicada_devuelve_409(client):
+    token = _token("COMERCIAL")
+    token_tecnico = _token("TECNICO")
+    created = client.post(
+        "/projects", json=STOCK_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    payload = {
+        "fecha_instalacion": "2026-08-01",
+        "tecnico_id": "u1",
+        "tecnico_nombre": "Andrés Pérez",
+        "ciudad": "Barranquilla",
+    }
+    client.post(
+        f"/projects/{created['crp_code']}/instalacion", json=payload, headers={"Authorization": f"Bearer {token_tecnico}"}
+    )
+    response = client.post(
+        f"/projects/{created['crp_code']}/instalacion", json=payload, headers={"Authorization": f"Bearer {token_tecnico}"}
+    )
+    assert response.status_code == 409
+
+
+def test_otro_rol_no_puede_programar_instalacion_via_api(client):
+    token = _token("COMERCIAL")
+    created = client.post(
+        "/projects", json=STOCK_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+
+    response = client.post(
+        f"/projects/{created['crp_code']}/instalacion",
+        json={
+            "fecha_instalacion": "2026-08-01",
+            "tecnico_id": "u1",
+            "tecnico_nombre": "Andrés Pérez",
+            "ciudad": "Barranquilla",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403

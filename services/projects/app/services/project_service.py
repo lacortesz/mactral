@@ -180,10 +180,11 @@ def get_project_detail(db: Session, crp_code: str, actor_role: Rol) -> ProjectDe
         checklist=checklist,
         ingreso_bodega_fecha=project.ingreso_bodega_fecha,
         ingreso_bodega_nota=project.ingreso_bodega_nota,
+        instalacion=project.instalacion,
     )
 
 
-def _get_project_by_code(db: Session, crp_code: str) -> Project:
+def get_project_by_code(db: Session, crp_code: str) -> Project:
     project = db.execute(
         select(Project).where(Project.crp_code.ilike(crp_code.strip()))
     ).scalar_one_or_none()
@@ -211,7 +212,7 @@ def update_checklist_item(
     if not can_edit_checklist(actor_role):
         raise ForbiddenError("Solo el rol Importaciones (o Gerencia) puede cambiar el checklist.")
 
-    project = _get_project_by_code(db, crp_code)
+    project = get_project_by_code(db, crp_code)
     item = _get_checklist_item(project, numero)
 
     item.estado = data.estado
@@ -253,7 +254,7 @@ def update_checklist_item(
 
 
 def get_checklist_attachment(db: Session, crp_code: str, numero: str) -> ImportChecklistItem:
-    project = _get_project_by_code(db, crp_code)
+    project = get_project_by_code(db, crp_code)
     return _get_checklist_item(project, numero)
 
 
@@ -274,7 +275,7 @@ def enviar_a_tecnico(
     if not can_edit_checklist(actor_role):
         raise ForbiddenError("Solo el rol Importaciones (o Gerencia) puede enviar el proyecto a Técnico.")
 
-    project = _get_project_by_code(db, crp_code)
+    project = get_project_by_code(db, crp_code)
     if not project.checklist_items:
         raise NoChecklistError("Este proyecto no tiene checklist de importación (no es un proyecto GM).")
 
@@ -303,7 +304,10 @@ def enviar_a_tecnico(
             )
         )
     else:
-        # Escenario 1: checklist completo (todo Archivado o No Aplica).
+        # Escenario 1: checklist completo (todo Archivado o No Aplica). El
+        # ingreso a bodega también se registra aquí (restricción de E5-H1:
+        # la instalación no puede programarse antes de esta fecha).
+        project.ingreso_bodega_fecha = now
         db.add(
             ProjectEvent(
                 project_id=project.id,

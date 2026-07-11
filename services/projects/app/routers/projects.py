@@ -8,12 +8,15 @@ from app.schemas import (
     ChecklistItemOut,
     ChecklistItemUpdate,
     EnviarTecnicoIn,
+    InstallationCreate,
+    InstallationOut,
+    InstallationReprogram,
     ProjectCreate,
     ProjectCreateOut,
     ProjectDetailOut,
     ProjectSearchResult,
 )
-from app.services import project_service
+from app.services import installation_service, project_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -122,4 +125,42 @@ def enviar_a_tecnico(
     except project_service.NoChecklistError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except project_service.TransitionBlockedError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.post("/{crp_code}/instalacion", response_model=InstallationOut, status_code=status.HTTP_201_CREATED)
+def programar_instalacion(
+    crp_code: str,
+    payload: InstallationCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        return installation_service.programar_instalacion(db, current_user, crp_code, payload)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except project_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except installation_service.InstallationAlreadyExistsError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except installation_service.InvalidInstallationDateError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.patch("/{crp_code}/instalacion", response_model=InstallationOut)
+def reprogramar_instalacion(
+    crp_code: str,
+    payload: InstallationReprogram,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        return installation_service.reprogramar_instalacion(db, current_user, crp_code, payload)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except project_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except installation_service.InstallationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except installation_service.InvalidInstallationDateError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

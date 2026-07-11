@@ -9,6 +9,7 @@ import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
 import RegMaestroPage from "./pages/RegMaestroPage";
 import SetPasswordPage from "./pages/SetPasswordPage";
+import TecnicoPage from "./pages/TecnicoPage";
 import UsuariosPage from "./pages/UsuariosPage";
 
 function HomeRedirect() {
@@ -61,6 +62,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ImportacionesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tecnico"
+        element={
+          <ProtectedRoute>
+            <TecnicoPage />
           </ProtectedRoute>
         }
       />

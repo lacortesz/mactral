@@ -1,8 +1,15 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, model_validator
 
-from app.domain import EstadoEtapa, EstadoItemChecklist, Modulo, SemaforoColor, TipoItemChecklist
+from app.domain import (
+    EstadoEtapa,
+    EstadoInstalacion,
+    EstadoItemChecklist,
+    Modulo,
+    SemaforoColor,
+    TipoItemChecklist,
+)
 
 
 class ProjectSearchResult(BaseModel):
@@ -97,6 +104,44 @@ class EnviarTecnicoIn(BaseModel):
     ingreso_bodega_nota: str | None = None
 
 
+class InstallationCreate(BaseModel):
+    fecha_instalacion: date
+    tecnico_id: str
+    tecnico_nombre: str
+    ciudad: str
+
+
+class InstallationReprogram(BaseModel):
+    fecha_instalacion: date
+    motivo: str
+
+    @model_validator(mode="after")
+    def check_motivo(self):
+        if not self.motivo.strip():
+            raise ValueError("Escribe el motivo de la reprogramación")
+        return self
+
+
+class InstallationReprogrammingOut(BaseModel):
+    fecha_anterior: date
+    fecha_nueva: date
+    motivo: str
+    usuario_nombre: str
+    fecha_cambio: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InstallationOut(BaseModel):
+    fecha_instalacion: date
+    tecnico_nombre: str
+    ciudad: str
+    estado: EstadoInstalacion
+    historial: list[InstallationReprogrammingOut] = []
+
+    model_config = {"from_attributes": True}
+
+
 class ProjectDetailOut(BaseModel):
     id: str
     crp_code: str
@@ -113,3 +158,5 @@ class ProjectDetailOut(BaseModel):
     checklist: list[ChecklistItemOut] = []
     ingreso_bodega_fecha: datetime | None = None
     ingreso_bodega_nota: str | None = None
+    instalacion: InstallationOut | None = None
+
