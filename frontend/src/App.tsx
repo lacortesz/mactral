@@ -7,6 +7,7 @@ import FinancieroPage from "./pages/FinancieroPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ImportacionesPage from "./pages/ImportacionesPage";
 import LoginPage from "./pages/LoginPage";
+import LogisticaPage from "./pages/LogisticaPage";
 import ModulePage from "./pages/ModulePage";
 import RegMaestroPage from "./pages/RegMaestroPage";
 import SetPasswordPage from "./pages/SetPasswordPage";
@@ -88,6 +89,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <FinancieroPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/logistica"
+        element={
+          <ProtectedRoute>
+            <LogisticaPage />
           </ProtectedRoute>
         }
       />

@@ -10,6 +10,7 @@ const NAV_ORDER: ModuleKey[] = [
   "tecnico",
   "stock",
   "financiero",
+  "logistica",
   "administracion",
 ];
 

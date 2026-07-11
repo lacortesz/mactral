@@ -16,6 +16,7 @@ export type ModuleKey =
   | "tecnico"
   | "stock"
   | "financiero"
+  | "logistica"
   | "administracion";
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -25,6 +26,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   tecnico: "Técnico",
   stock: "Stock",
   financiero: "Financiero",
+  logistica: "Logística",
   administracion: "Administración",
 };
 
@@ -50,6 +52,7 @@ const DEDICATED_MODULE_ROUTES: Partial<Record<ModuleKey, string>> = {
   tecnico: "/tecnico",
   stock: "/stock",
   financiero: "/financiero",
+  logistica: "/logistica",
 };
 
 export function moduleRoute(m: ModuleKey): string {

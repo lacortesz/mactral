@@ -229,6 +229,29 @@ class TableroFinancieroOut(BaseModel):
     anticipo1_solicitud_confirmada: bool
 
 
+class CuentaPorPagarCreate(BaseModel):
+    """E8-H1: registro de un gasto logístico (vuelo/hospedaje/transporte/
+    viáticos/otro), que a la vez es la cuenta por pagar consolidada de
+    E7-H3 imputada automáticamente al proyecto — E8-H3."""
+
+    tipo: TipoGastoLogistico
+    proveedor: str
+    concepto: str
+    monto: int
+    moneda: str = "COP"
+    tasa_cop: float | None = None
+    fecha_vencimiento: date
+    autorizado_gg: bool = False
+
+    @model_validator(mode="after")
+    def check_viaticos_requiere_autorizacion(self):
+        if self.monto <= 0:
+            raise ValueError("El monto debe ser mayor a cero")
+        if self.tipo == TipoGastoLogistico.VIATICOS and not self.autorizado_gg:
+            raise ValueError("Los viáticos requieren autorización obligatoria del Gerente General")
+        return self
+
+
 class CuentaPorPagarOut(BaseModel):
     """E7-H3: fila del tablero consolidado de cuentas por pagar (también es
     la fuente del registro de gasto logístico de E8-H1, imputado
