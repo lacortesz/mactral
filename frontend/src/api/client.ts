@@ -15,6 +15,31 @@ export class ApiError extends Error {
   }
 }
 
+// Mensajes de validación automática de FastAPI/Pydantic (no personalizados
+// con @model_validator, que ya vienen en español) — vienen siempre en
+// inglés, así que se traducen los patrones más comunes antes de mostrarlos.
+function translateValidationMessage(msg: string): string {
+  const patterns: [RegExp, (m: RegExpMatchArray) => string][] = [
+    [/^Field required$/, () => "Este campo es obligatorio"],
+    [/^String should have at least (\d+) character/, (m) => `Debe tener al menos ${m[1]} caracter(es)`],
+    [/^String should have at most (\d+) character/, (m) => `Debe tener máximo ${m[1]} caracter(es)`],
+    [/^Input should be greater than or equal to (.+)$/, (m) => `Debe ser mayor o igual a ${m[1]}`],
+    [/^Input should be less than or equal to (.+)$/, (m) => `Debe ser menor o igual a ${m[1]}`],
+    [/^Input should be greater than (.+)$/, (m) => `Debe ser mayor a ${m[1]}`],
+    [/^Input should be less than (.+)$/, (m) => `Debe ser menor a ${m[1]}`],
+    [/^Input should be a valid integer.*$/, () => "Debe ser un número entero válido"],
+    [/^Input should be a valid number.*$/, () => "Debe ser un número válido"],
+    [/^Input should be a valid boolean.*$/, () => "Debe ser verdadero o falso"],
+    [/^Input should be a valid string.*$/, () => "Debe ser un texto válido"],
+  ];
+
+  for (const [pattern, translate] of patterns) {
+    const match = msg.match(pattern);
+    if (match) return translate(match);
+  }
+  return msg;
+}
+
 function extractMessage(status: number, body: unknown): string {
   if (body && typeof body === "object" && "detail" in body) {
     const detail = (body as { detail: unknown }).detail;
@@ -23,7 +48,8 @@ function extractMessage(status: number, body: unknown): string {
       return String((detail as { message: unknown }).message);
     }
     if (Array.isArray(detail) && detail[0]?.msg) {
-      return String(detail[0].msg).replace(/^Value error,\s*/, "");
+      const raw = String(detail[0].msg).replace(/^Value error,\s*/, "");
+      return translateValidationMessage(raw);
     }
   }
   return `Error inesperado (HTTP ${status})`;
