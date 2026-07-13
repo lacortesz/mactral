@@ -345,6 +345,12 @@ class CuentaPorPagarCreate(BaseModel):
         return self
 
 
+class CuentaPorPagarPagoCreate(BaseModel):
+    """Marca una cuenta por pagar (gasto logístico) como pagada."""
+
+    fecha_pago: date
+
+
 class CuentaPorPagarOut(BaseModel):
     """E7-H3: fila del tablero consolidado de cuentas por pagar (también es
     la fuente del registro de gasto logístico de E8-H1, imputado

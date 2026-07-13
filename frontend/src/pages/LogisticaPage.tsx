@@ -181,6 +181,30 @@ export default function LogisticaPage() {
     }
   }
 
+  const [fechasPago, setFechasPago] = useState<Record<string, string>>({});
+  const [pagoSaving, setPagoSaving] = useState<string | null>(null);
+  const [pagoError, setPagoError] = useState<string | null>(null);
+
+  async function handleMarcarPagada(gastoId: string) {
+    if (!selected) return;
+    const fechaPago = fechasPago[gastoId];
+    if (!fechaPago) return;
+    setPagoError(null);
+    setPagoSaving(gastoId);
+    try {
+      await projectsApiFetch(`/projects/${encodeURIComponent(selected.crp_code)}/logistica/${gastoId}/pago`, {
+        method: "PATCH",
+        token,
+        body: { fecha_pago: fechaPago },
+      });
+      await loadGastos(selected.crp_code);
+    } catch (err) {
+      setPagoError(err instanceof ApiError ? err.message : "No se pudo marcar el gasto como pagado");
+    } finally {
+      setPagoSaving(null);
+    }
+  }
+
   return (
     <AppShell>
       <h1 className="page-title">Logística</h1>
@@ -326,6 +350,7 @@ export default function LogisticaPage() {
             gastos && (
               <>
                 {soporteError && <div className="alert alert-error">{soporteError}</div>}
+                {pagoError && <div className="alert alert-error">{pagoError}</div>}
                 <table>
                 <thead>
                   <tr>
@@ -352,6 +377,22 @@ export default function LogisticaPage() {
                         <span className={`badge ${g.estado === "PAGADA" ? "badge-status-activo" : "badge-role"}`}>
                           {g.estado === "PAGADA" ? "Pagada" : "Pendiente"}
                         </span>
+                        {g.estado === "PENDIENTE" && (
+                          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                            <input
+                              type="date"
+                              style={{ width: 130 }}
+                              onChange={(e) => setFechasPago((prev) => ({ ...prev, [g.id]: e.target.value }))}
+                            />
+                            <button
+                              className="btn-primary"
+                              disabled={pagoSaving === g.id || !fechasPago[g.id]}
+                              onClick={() => handleMarcarPagada(g.id)}
+                            >
+                              {pagoSaving === g.id ? "..." : "Marcar pagada"}
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td>
                         {g.tiene_soporte ? (

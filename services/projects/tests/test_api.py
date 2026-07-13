@@ -943,3 +943,71 @@ def test_kpis_financieros_otro_rol_devuelve_403_via_api(client):
     token = _token("COMERCIAL")
     response = client.get("/reportes/kpis-financieros", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
+
+
+def test_marcar_gasto_logistico_pagado_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    gasto = client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=GASTO_LOGISTICO_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    ).json()
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/logistica/{gasto['id']}/pago",
+        json={"fecha_pago": "2026-08-01"},
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["estado"] == "PAGADA"
+    assert body["fecha_pago"] == "2026-08-01"
+
+
+def test_marcar_gasto_ya_pagado_devuelve_409_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    gasto = client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=GASTO_LOGISTICO_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    ).json()
+    client.patch(
+        f"/projects/{created['crp_code']}/logistica/{gasto['id']}/pago",
+        json={"fecha_pago": "2026-08-01"},
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/logistica/{gasto['id']}/pago",
+        json={"fecha_pago": "2026-08-02"},
+        headers={"Authorization": f"Bearer {token_admin}"},
+    )
+    assert response.status_code == 409
+
+
+def test_marcar_gasto_pagado_otro_rol_devuelve_403_via_api(client):
+    token = _token("COMERCIAL")
+    token_admin = _token("ADMINISTRATIVO")
+    created = client.post(
+        "/projects", json=GM_CREATE_PAYLOAD, headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    gasto = client.post(
+        f"/projects/{created['crp_code']}/logistica",
+        json=GASTO_LOGISTICO_PAYLOAD,
+        headers={"Authorization": f"Bearer {token_admin}"},
+    ).json()
+
+    response = client.patch(
+        f"/projects/{created['crp_code']}/logistica/{gasto['id']}/pago",
+        json={"fecha_pago": "2026-08-01"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
