@@ -13,51 +13,73 @@ Implementa:
 - **E1-H3 — Ficha central del proyecto (CRP)**: búsqueda de un proyecto por
   código CRP o cliente, ficha de solo lectura con datos base, estado por
   módulo (con candado en las etapas cerradas) y línea de tiempo.
+- **E2-H1 — Registro de lead**: alta de leads con datos de contacto y equipo
+  solicitado, consecutivo automático por línea de negocio (MOB/IND), y
+  registro de interacciones posteriores.
+- **E2-H2 — Cotización en PDF con calculadora oficial**: generación de una
+  cotización en PDF (valor del equipo, tipo de pago, % de anticipos, fecha
+  estimada de entrega) adjunta al lead con numeración basada en su
+  consecutivo; el estado cambia automáticamente a Enviada la primera vez, y
+  cada regeneración crea una nueva versión conservando el historial completo.
+- **E2-H3 — Cambio de estado del lead**: avance secuencial y no reversible
+  Cotizar → Enviada → Vendido, con historial de cada cambio (fecha/hora/
+  usuario); saltar un estado (p. ej. Cotizar → Vendido) queda bloqueado con
+  el mensaje "Primero cambia el estado a Enviada"; al marcar Vendido se pide
+  la clasificación GM/Stock y las etapas anteriores quedan en solo lectura.
+- **E2-H4 — Clasificación GM/Stock al cerrar venta**: al confirmar la
+  clasificación, "Sistema" crea el Registro Maestro en `services/projects`
+  con un código consecutivo (`GM26-XX` / `STMB26-XX` / `STIN26-XX`); GM abre
+  el flujo completo (Importaciones), Stock reserva una unidad y va directo a
+  Técnico; sin unidades disponibles, el cierre de venta se bloquea con
+  "No hay unidades disponibles".
 
-Ver `HU_AC_Mockups_GrupoMactral_Epica_1.pdf` para las historias de usuario
-originales.
+Ver `HU_AC_Mockups_GrupoMactral_v1_optimizado.pdf` (32 historias, 11 épicas)
+para las historias de usuario originales.
 
 ## Estructura
 
 ```
-services/auth/       FastAPI + SQLAlchemy + Alembic (usuarios, roles, sesión)
-services/projects/   FastAPI + SQLAlchemy + Alembic (ficha CRP, E1-H3)
-frontend/            React + Vite + TypeScript (SPA)
+services/auth/        FastAPI + SQLAlchemy + Alembic (usuarios, roles, sesión)
+services/projects/    FastAPI + SQLAlchemy + Alembic (ficha CRP, E1-H3)
+services/comercial/   FastAPI + SQLAlchemy + Alembic (leads, E2-H1/E2-H2)
+frontend/             React + Vite + TypeScript (SPA)
 docker-compose.yml
 ```
 
-`auth` y `projects` comparten la misma instancia de Postgres (bases lógicas
-separadas por prefijo de tabla, cada una con su propia tabla de versiones de
-Alembic) y el mismo `JWT_SECRET`: `projects` no emite sesiones, solo verifica
-el JWT que emitió `auth`.
+`auth`, `projects` y `comercial` comparten la misma instancia de Postgres
+(bases lógicas separadas por prefijo de tabla, cada una con su propia tabla
+de versiones de Alembic) y el mismo `JWT_SECRET`: `projects` y `comercial`
+no emiten sesiones, solo verifican el JWT que emitió `auth`.
 
 ## Puesta en marcha (Docker, recomendado)
 
 ```bash
-docker compose up -d --build postgres auth projects frontend
-docker compose run --rm seed             # usuario Gerencia/Admin inicial
-docker compose run --rm seed-projects    # proyectos de ejemplo (GM26-03, GM26-04)
+docker compose up -d --build postgres auth projects comercial frontend
+docker compose run --rm seed              # usuario Gerencia/Admin inicial
+docker compose run --rm seed-projects     # proyectos de ejemplo (GM26-03, GM26-04)
+docker compose run --rm seed-comercial    # leads de ejemplo (MOB26-01x, IND26-00x)
 ```
 
 - Frontend: http://localhost:8080
 - API auth: http://localhost:8000 (docs interactivas en `/docs`)
 - API projects: http://localhost:8100 (docs interactivas en `/docs`)
+- API comercial: http://localhost:8200 (docs interactivas en `/docs`)
 - Usuario inicial: `maya@grupomactral.com` / `Mactral2026!` (configurable via
   `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`)
 
 ## Puesta en marcha (desarrollo local, sin Docker)
 
-Backend (repetir para `services/auth` y `services/projects`; ambos siguen el
-mismo patrón):
+Backend (repetir para `services/auth`, `services/projects` y
+`services/comercial`; los tres siguen el mismo patrón):
 ```bash
-cd services/auth   # o services/projects
+cd services/auth   # o services/projects, o services/comercial
 python -m venv .venv && source .venv/Scripts/activate  # o .venv/bin/activate en Linux/Mac
 pip install -r requirements-dev.txt
 cp .env.example .env   # ajustar DATABASE_URL a un Postgres local; JWT_SECRET debe
-                        # ser igual en ambos servicios
+                        # ser igual en los tres servicios
 alembic upgrade head
 python seed.py
-uvicorn app.main:app --reload   # auth en :8000, projects usar --port 8100
+uvicorn app.main:app --reload   # auth :8000, projects :8100, comercial :8200
 ```
 
 Frontend:
@@ -73,17 +95,48 @@ npm run dev   # http://localhost:5173
 **URLs actuales:**
 - Frontend: https://frontend-production-1622.up.railway.app
 - API auth: https://auth-production-b32d.up.railway.app (docs en `/docs`)
+- API projects: https://projects-production-826d.up.railway.app (docs en `/docs`)
+- API comercial: https://comercial-production-7e35.up.railway.app (docs en `/docs`)
 - Usuario inicial: `maya@grupomactral.com` / `Mactral2026!`
-
-> `services/projects` (E1-H3) todavía no está desplegado en Railway — solo
-> corre localmente / vía Docker por ahora. Desplegarlo sigue el mismo patrón
-> que `auth` (ver comandos abajo, servicio nuevo + su propio dominio +
-> `VITE_PROJECTS_API_BASE_URL` en el frontend).
 
 Se desplegó con el [Railway CLI](https://docs.railway.com/guides/cli) (no vía
 `docker-compose.yml` directamente — Railway despliega cada servicio por
-separado a partir de su Dockerfile). Proyecto: `mactral`, 3 servicios:
-`Postgres` (plugin gestionado), `auth` y `frontend`.
+separado a partir de su Dockerfile). Proyecto: `mactral`, 5 servicios:
+`Postgres` (plugin gestionado), `auth`, `projects`, `comercial` y `frontend`.
+
+> El plan gratuito de Railway tiene un límite de recursos (falló al crear el
+> 5to servicio con "Free plan resource provision limit exceeded"); se
+> resolvió reintentando tras que el plan quedara disponible. Si vuelve a
+> pasar al agregar un servicio nuevo, revisar el plan/límites en el
+> dashboard antes de asumir que es un problema del CLI.
+
+### Auto-deploy desde GitHub (pendiente de un paso manual)
+
+Los 3 servicios de código están conectados al repo `lacortesz/mactral`, rama
+`dev` (`railway service source connect --repo ... --branch dev --service ...`),
+pero el build automático **todavía falla** porque el CLI de Railway no
+expone la opción "Root Directory", necesaria en un monorepo (cada Dockerfile
+vive en una subcarpeta, no en la raíz del repo — Railway intenta compilar
+desde la raíz y no encuentra nada: `Railpack could not determine how to
+build the app`). Sin este ajuste, cada `git push` a `dev` deja un deployment
+en `FAILED` (Railway sigue sirviendo la última versión buena, así que no hay
+caída de servicio, pero tampoco se actualiza solo).
+
+Pendiente, una sola vez por servicio, desde el dashboard de Railway
+(Settings → Source → Root Directory):
+- `auth` → `services/auth`
+- `projects` → `services/projects`
+- `comercial` → `services/comercial`
+- `frontend` → `frontend`
+
+`projects` y `comercial` ni siquiera están conectados todavía a GitHub (solo
+`auth` y `frontend` lo están); se agregaron directo con `railway up` sin
+`service source connect`. Conectarlos es un paso aparte y de todos modos no
+sirve de nada mientras el Root Directory no esté fijado.
+
+Hasta que se haga eso, los despliegues se siguen haciendo a mano con
+`railway up <carpeta> --path-as-root --service <nombre> --detach --ci` (ver
+comandos abajo) cada vez que haya cambios que llevar a producción.
 
 ### Reproducir el despliegue desde cero
 
@@ -107,32 +160,73 @@ railway up services/auth --path-as-root --service auth --detach --ci
 railway domain --service auth                # genera <auth-domain>.up.railway.app
 railway domain update <auth-domain> --port 8000 --service auth   # ver nota de puertos abajo
 
-# 3. Frontend
+# 3. Servicio de proyectos (services/projects, E1-H3) — mismo JWT_SECRET que auth
+railway add --service projects
+railway variable set "DATABASE_URL=postgresql+psycopg://\${{Postgres.PGUSER}}:\${{Postgres.PGPASSWORD}}@\${{Postgres.PGHOST}}:\${{Postgres.PGPORT}}/\${{Postgres.PGDATABASE}}" --service projects --skip-deploys
+railway variable set "JWT_SECRET=<el mismo valor usado en auth>" --service projects --skip-deploys
+railway up services/projects --path-as-root --service projects --detach --ci
+railway domain --service projects            # genera <projects-domain>.up.railway.app
+# El puerto real lo decide el $PORT que Railway inyecta en el contenedor (ver
+# gotcha de puertos abajo); revisar con `railway logs --service projects` qué
+# puerto imprime uvicorn y usar ese valor, no asumir uno fijo.
+railway domain update <projects-domain> --port <puerto-real> --service projects
+
+# 4. Servicio comercial (services/comercial, E2-H1) — mismo JWT_SECRET que auth
+railway add --service comercial
+railway variable set "DATABASE_URL=postgresql+psycopg://\${{Postgres.PGUSER}}:\${{Postgres.PGPASSWORD}}@\${{Postgres.PGHOST}}:\${{Postgres.PGPORT}}/\${{Postgres.PGDATABASE}}" --service comercial --skip-deploys
+railway variable set "JWT_SECRET=<el mismo valor usado en auth>" --service comercial --skip-deploys
+railway up services/comercial --path-as-root --service comercial --detach --ci
+railway domain --service comercial           # genera <comercial-domain>.up.railway.app
+railway domain update <comercial-domain> --port <puerto-real> --service comercial
+
+# 5. Frontend
 railway add --service frontend
 railway variable set "VITE_API_BASE_URL=https://<auth-domain>" --service frontend --skip-deploys
+railway variable set "VITE_PROJECTS_API_BASE_URL=https://<projects-domain>" --service frontend --skip-deploys
+railway variable set "VITE_COMERCIAL_API_BASE_URL=https://<comercial-domain>" --service frontend --skip-deploys
 railway up frontend --path-as-root --service frontend --detach --ci
 railway domain --service frontend            # genera <frontend-domain>.up.railway.app
 railway domain update <frontend-domain> --port 80 --service frontend
 
-# 4. Cerrar el círculo: el backend necesita saber el dominio del frontend
+# 6. Cerrar el círculo: los backends necesitan saber el dominio del frontend
 railway variable set "APP_BASE_URL=https://<frontend-domain>" --service auth --skip-deploys
 railway variable set 'CORS_ORIGINS=["https://<frontend-domain>"]' --service auth   # dispara redeploy
+railway variable set 'CORS_ORIGINS=["https://<frontend-domain>"]' --service projects
+railway variable set 'CORS_ORIGINS=["https://<frontend-domain>"]' --service comercial
 
-# 5. Crear el usuario administrador inicial
+# 7. Crear el usuario administrador y los datos de ejemplo
 railway variable list --service Postgres --json   # copiar DATABASE_PUBLIC_URL
 cd services/auth && source .venv/Scripts/activate
 DATABASE_URL="postgresql+psycopg://...<DATABASE_PUBLIC_URL con el driver +psycopg>..." \
 SEED_ADMIN_EMAIL=maya@grupomactral.com SEED_ADMIN_PASSWORD='Mactral2026!' \
 python seed.py
+
+cd ../projects && source .venv/Scripts/activate
+DATABASE_URL="postgresql+psycopg://...<misma DATABASE_PUBLIC_URL>..." python seed.py
+
+cd ../comercial && source .venv/Scripts/activate
+DATABASE_URL="postgresql+psycopg://...<misma DATABASE_PUBLIC_URL>..." python seed.py
 ```
 
 ### Gotchas encontrados
 
-- **502 "Application failed to respond"** en ambos servicios justo después del
-  primer deploy: Railway no sabía a qué puerto interno enrutar el tráfico
-  público. Se resolvió con `railway domain update <dominio> --port <puerto>`
-  (8000 para `auth`, 80 para `frontend`/nginx). Si vuelve a pasar, revisar el
-  puerto configurado en el dominio del servicio.
+- **502 "Application failed to respond"** justo después de cada primer
+  deploy: Railway no sabía a qué puerto interno enrutar el tráfico público.
+  Con `auth` y `frontend` (puertos fijos 8000 y 80 en su Dockerfile) se
+  resolvió con `railway domain update <dominio> --port <puerto-fijo>`. Con
+  `projects` (cuyo Dockerfile usa `${PORT:-8100}`, portable a propósito)
+  Railway inyectó su propio `$PORT` (resultó ser 8080, no 8100 ni el que uno
+  esperaría) — hay que revisar `railway logs --service <nombre>` para ver en
+  qué puerto quedó escuchando uvicorn realmente y usar ese valor en
+  `railway domain update`, no asumirlo.
+- **Auto-deploy por GitHub falla en un monorepo** sin poder fijar "Root
+  Directory" desde el CLI (ver sección de arriba) — hay que hacerlo una vez
+  por servicio desde el dashboard.
+- **"Free plan resource provision limit exceeded"** al agregar el 5to
+  servicio (`comercial`): el plan gratuito de Railway limita cuántos
+  servicios/recursos se pueden crear. Se resolvió reintentando el mismo
+  `railway add --service ...` más tarde; si vuelve a pasar, revisar el plan
+  en el dashboard antes de gastar tiempo depurando el comando.
 - **`railway ssh --service auth python seed.py` se queda colgado** — no se
   investigó a fondo por qué; como alternativa, se corrió `seed.py`
   *localmente* apuntando a `DATABASE_PUBLIC_URL` del plugin de Postgres (la
@@ -152,11 +246,13 @@ dashboard de vez en cuando.
 
 ## Pruebas
 
-Repetir en cada servicio (`services/auth`, `services/projects`):
+Repetir en cada servicio (`services/auth`, `services/projects`,
+`services/comercial`):
 ```bash
-cd services/auth   # o services/projects
+cd services/auth   # o services/projects, o services/comercial
 source .venv/Scripts/activate
-pytest --cov --cov-report=term-missing   # umbral 90%; auth 96%, projects 100%
+pytest --cov --cov-report=term-missing
+# umbral 90%; auth 96%, projects 100%, comercial 97%
 ```
 
 ## Qué cubre cada historia
@@ -210,6 +306,82 @@ manda el *nombre* del enum de Python a Postgres, no el valor — hay que pasar
 `values_callable` explícitamente en la columna (`app/models.py`) o falla con
 `invalid input value for enum` en Postgres (no se detecta en SQLite porque
 ahí no hay una restricción real, así que los tests unitarios no lo atrapan).
+
+### E2-H1
+- Alta exitosa (`POST /leads`, `services/comercial/app/services/lead_service.py`)
+  → lead con estado `COTIZAR` y consecutivo automático `MOB26-XXX` /
+  `IND26-XXX` según línea de negocio, con contador por (línea, año) protegido
+  con `SELECT ... FOR UPDATE` para altas concurrentes.
+- Campos obligatorios incompletos (nombre, y al menos teléfono o correo) →
+  422 con el mensaje exacto "Completa los campos requeridos"
+  (`app/schemas.py`), sin crear el registro.
+- Registro de interacción posterior (`POST /leads/{id}/interactions`) → queda
+  en el historial del lead con fecha, canal, resumen y usuario.
+- Solo el vendedor asignado (por `vendedor_id`, tomado del JWT al crear el
+  lead) o Gerencia pueden agregar interacciones; solo roles Comercial o
+  Gerencia pueden crear leads (`can_manage_leads` en `app/domain.py`).
+- Frontend: página dedicada del módulo Comercial
+  (`frontend/src/pages/ComercialPage.tsx`) con KPIs por estado, listado,
+  formulario de alta y panel de interacciones por lead.
+
+### E2-H2
+- Generación de cotización (`POST /leads/{id}/quotations`,
+  `services/comercial/app/services/quotation_service.py`) → PDF construido
+  con `reportlab` (`app/pdf.py`), guardado como `LargeBinary` directamente en
+  Postgres (no en el filesystem, para portabilidad en Railway), adjunto al
+  lead; si el lead estaba en `COTIZAR` el estado cambia a `ENVIADA` (solo la
+  primera vez, no en regeneraciones posteriores).
+- Calculadora oficial: la API valida que `anticipo_inicial_pct +
+  segundo_anticipo_pct + saldo_final_pct == 100` y que `valor_equipo > 0`
+  (`app/schemas.py`, `QuotationCreate`); no admite texto libre.
+- Regeneración (`POST` repetido sobre el mismo lead) → incrementa la versión
+  (`v1`, `v2`, ...) conservando las versiones anteriores en el historial;
+  número de cotización = `{código del lead}-v{versión}`.
+- Descarga del PDF (`GET /leads/{id}/quotations/{version}/pdf`); solo el
+  vendedor asignado o Gerencia pueden generar/ver cotizaciones (mismo
+  `can_edit_lead` de E2-H1).
+- Frontend: tarjeta "Cotización" en `ComercialPage.tsx` con formulario,
+  desglose en vivo, historial de versiones y botón "Vista previa" que abre el
+  PDF en una pestaña nueva (usando `comercialFetchBlob` porque un `<a href>`
+  normal no puede enviar el header `Authorization`).
+
+### E2-H3
+- Cambio de estado (`PATCH /leads/{id}/estado`,
+  `services/comercial/app/services/estado_service.py`) → solo permite avanzar
+  al siguiente estado de `ESTADO_SIGUIENTE` (`app/domain.py`: `COTIZAR` →
+  `ENVIADA` → `VENDIDO`); cualquier salto o retroceso devuelve 422 con el
+  mensaje exacto "Primero cambia el estado a Enviada".
+- Cada cambio (incluida la transición automática de E2-H2 al generar la
+  primera cotización) queda registrado en `estado_historial` con fecha/hora
+  y usuario (`app/models.py`, `EstadoHistorial`).
+- Al marcar `VENDIDO` la API exige `clasificacion` (`GM` / `STOCK_MOBILITY` /
+  `STOCK_INDUSTRY`, prep de E2-H4) y la vuelve inmutable: un segundo intento
+  de cambiarla es rechazado salvo que el actor sea Gerencia.
+- Frontend: badge de estado, botón "Avanzar a Enviada" / "Marcar como
+  Vendido" (este último abre un modal para elegir la clasificación),
+  historial de cambios visible en la ficha del lead, e interacciones/
+  cotización pasan a solo lectura una vez el lead está `VENDIDO`.
+
+### E2-H4
+- Al confirmar la clasificación en `PATCH /leads/{id}/estado` (estado
+  `VENDIDO`), `services/comercial` reenvía el JWT del vendedor y llama a
+  `POST /projects` en `services/projects` (`app/clients/projects_client.py`)
+  para crear el Registro Maestro; el actor conceptual es "Sistema" pero
+  técnicamente actúa con la identidad de quien cerró la venta.
+- `services/projects` genera el código consecutivo por prefijo y año
+  (`GM26-XX` / `STMB26-XX` / `STIN26-XX`) con el mismo patrón de
+  `SELECT ... FOR UPDATE` que el contador de leads (`ProjectCounter`,
+  `app/services/project_service.py`), y abre los módulos según el flujo:
+  GM deja Importaciones en curso (flujo completo); Stock cierra
+  Importaciones y deja Técnico en curso (flujo corto).
+- Clasificación Stock (`STOCK_MOBILITY` / `STOCK_INDUSTRY`): antes de crear
+  el Registro Maestro, `app/services/stock_service.py` reserva una unidad de
+  `StockItem` (por línea de negocio + tipo de producto) con lock de fila; si
+  no hay unidades, el cierre de venta se bloquea con 422 "No hay unidades
+  disponibles" y ninguna mutación queda a medias (rollback explícito).
+- Frontend: el código generado (`codigo_generado`) se muestra junto a la
+  clasificación en la ficha del lead; el error de falta de stock aparece
+  dentro del modal de clasificación.
 
 ## Notas de la migración de stack
 

@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.domain import EstadoEtapa, Modulo, SemaforoColor
-from app.models import Project, ProjectEvent, ProjectModuleStatus
+from app.models import Project, ProjectCounter, ProjectEvent, ProjectModuleStatus
 
 
 def _create_if_missing(db, crp_code, **kwargs) -> bool:
@@ -125,6 +125,17 @@ def main() -> None:
                     ),
                 ]
             )
+
+        # Sincronizar el contador para que el próximo código autogenerado no
+        # choque con los proyectos de ejemplo sembrados manualmente arriba
+        # (mismo principio que el LeadCounter en services/comercial/seed.py).
+        counter = db.execute(
+            select(ProjectCounter).where(ProjectCounter.prefijo == "GM", ProjectCounter.anio == 2026)
+        ).scalar_one_or_none()
+        if counter is None:
+            db.add(ProjectCounter(prefijo="GM", anio=2026, ultimo_valor=4))
+        elif counter.ultimo_valor < 4:
+            counter.ultimo_valor = 4
 
         db.commit()
     finally:

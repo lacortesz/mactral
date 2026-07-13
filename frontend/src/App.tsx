@@ -1,12 +1,19 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAuth } from "./context/AuthContext";
+import ComercialPage from "./pages/ComercialPage";
 import DashboardPage from "./pages/DashboardPage";
+import FinancieroPage from "./pages/FinancieroPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ImportacionesPage from "./pages/ImportacionesPage";
 import LoginPage from "./pages/LoginPage";
+import LogisticaPage from "./pages/LogisticaPage";
 import ModulePage from "./pages/ModulePage";
+import NotificacionesPage from "./pages/NotificacionesPage";
 import RegMaestroPage from "./pages/RegMaestroPage";
 import SetPasswordPage from "./pages/SetPasswordPage";
+import StockPage from "./pages/StockPage";
+import TecnicoPage from "./pages/TecnicoPage";
 import UsuariosPage from "./pages/UsuariosPage";
 
 function HomeRedirect() {
@@ -39,10 +46,66 @@ export default function App() {
         }
       />
       <Route
+        path="/comercial"
+        element={
+          <ProtectedRoute>
+            <ComercialPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/reg-maestro"
         element={
           <ProtectedRoute>
             <RegMaestroPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/importaciones"
+        element={
+          <ProtectedRoute>
+            <ImportacionesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tecnico"
+        element={
+          <ProtectedRoute>
+            <TecnicoPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stock"
+        element={
+          <ProtectedRoute>
+            <StockPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/financiero"
+        element={
+          <ProtectedRoute>
+            <FinancieroPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/logistica"
+        element={
+          <ProtectedRoute>
+            <LogisticaPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notificaciones"
+        element={
+          <ProtectedRoute>
+            <NotificacionesPage />
           </ProtectedRoute>
         }
       />

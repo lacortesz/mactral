@@ -16,6 +16,7 @@ export type ModuleKey =
   | "tecnico"
   | "stock"
   | "financiero"
+  | "logistica"
   | "administracion";
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -25,6 +26,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   tecnico: "Técnico",
   stock: "Stock",
   financiero: "Financiero",
+  logistica: "Logística",
   administracion: "Administración",
 };
 
@@ -45,6 +47,12 @@ export const LINE_LABELS: Record<LineaNegocio, string> = {
 const DEDICATED_MODULE_ROUTES: Partial<Record<ModuleKey, string>> = {
   administracion: "/usuarios",
   "reg-maestro": "/reg-maestro",
+  comercial: "/comercial",
+  importaciones: "/importaciones",
+  tecnico: "/tecnico",
+  stock: "/stock",
+  financiero: "/financiero",
+  logistica: "/logistica",
 };
 
 export function moduleRoute(m: ModuleKey): string {
@@ -52,13 +60,68 @@ export function moduleRoute(m: ModuleKey): string {
 }
 
 // E1-H3: catálogos de la ficha central del proyecto (CRP).
-export type EstadoEtapa = "PENDIENTE" | "EN_CURSO" | "CERRADO" | "BLOQUEADO";
+// E5-H2: ENTREGADO es el estado final del proyecto (solo etapa_actual, no
+// el estado por módulo).
+export type EstadoEtapa = "PENDIENTE" | "EN_CURSO" | "CERRADO" | "BLOQUEADO" | "ENTREGADO";
 
 export const ESTADO_ETAPA_LABELS: Record<EstadoEtapa, string> = {
   PENDIENTE: "Pendiente",
   EN_CURSO: "En curso",
   CERRADO: "Cerrado",
   BLOQUEADO: "Bloqueado",
+  ENTREGADO: "Entregado",
 };
 
 export type SemaforoColor = "VERDE" | "AMARILLO" | "ROJO";
+
+// E2-H1: catálogos del módulo Comercial (leads).
+export type EstadoLead = "COTIZAR" | "ENVIADA" | "VENDIDO";
+
+export const ESTADO_LEAD_LABELS: Record<EstadoLead, string> = {
+  COTIZAR: "Cotizar",
+  ENVIADA: "Enviada",
+  VENDIDO: "Vendido",
+};
+
+export const CANAL_ENTRADA_OPTIONS = [
+  "Sitio web",
+  "Referido",
+  "Feria comercial",
+  "Redes sociales",
+  "Llamada entrante",
+] as const;
+
+// E2-H2: catálogo de la calculadora oficial de cotizaciones.
+export type TipoPago = "CONTADO" | "CREDITO";
+
+export const TIPO_PAGO_LABELS: Record<TipoPago, string> = {
+  CONTADO: "Contado",
+  CREDITO: "Crédito",
+};
+
+// E2-H4: clasificación que se pide al marcar el lead como Vendido (E2-H3).
+export type TipoClasificacion = "GM" | "STOCK_MOBILITY" | "STOCK_INDUSTRY";
+
+export const TIPO_CLASIFICACION_LABELS: Record<TipoClasificacion, string> = {
+  GM: "GM (Registro Maestro)",
+  STOCK_MOBILITY: "Stock — Mobility",
+  STOCK_INDUSTRY: "Stock — Industry",
+};
+
+// E4-H1: catálogo del checklist documental de importación.
+export type TipoItemChecklist = "REQUERIDO" | "OPCIONAL";
+export type EstadoItemChecklist = "PENDIENTE" | "ARCHIVADO" | "NO_APLICA";
+
+// E5-H1/E5-H2: catálogo de la instalación (módulo Técnico).
+export type EstadoInstalacion = "PROGRAMADO" | "COMPLETADO";
+
+export const ESTADO_INSTALACION_LABELS: Record<EstadoInstalacion, string> = {
+  PROGRAMADO: "Programado",
+  COMPLETADO: "Completado",
+};
+
+export const ESTADO_ITEM_CHECKLIST_LABELS: Record<EstadoItemChecklist, string> = {
+  PENDIENTE: "Pendiente",
+  ARCHIVADO: "Archivado",
+  NO_APLICA: "No aplica",
+};

@@ -1,9 +1,11 @@
 from datetime import datetime
 
 import pytest
+from pydantic import ValidationError
 
 from app.domain import EstadoEtapa, Modulo, Rol, SemaforoColor
 from app.models import Project, ProjectEvent, ProjectModuleStatus
+from app.schemas import ModuleStatusIn, ProjectCreate
 from app.services import project_service
 
 
@@ -126,9 +128,134 @@ def test_search_projects_encuentra_por_nombre_de_cliente(db_session):
     assert len(results) == 1
 
 
+# --- E3-H2: búsqueda de proyecto por código CRP o cliente ------------------
+# La búsqueda ya existía desde E1-H3 (search_projects); estas pruebas
+# formalizan sus escenarios exactos, incluyendo el dato que faltaba en la
+# respuesta (etapa y semáforo junto al código).
+
+
+def test_e3h2_busqueda_por_codigo_exacto_devuelve_la_ficha(db_session):
+    _make_project(db_session)
+
+    results = project_service.search_projects(db_session, "GM26-03")
+
+    assert len(results) == 1
+    assert results[0].crp_code == "GM26-03"
+
+
+def test_e3h2_busqueda_por_cliente_incluye_codigo_estado_y_etapa(db_session):
+    _make_project(db_session)
+
+    results = project_service.search_projects(db_session, "san pedro")
+
+    assert results[0].crp_code == "GM26-03"
+    assert results[0].etapa_actual == EstadoEtapa.EN_CURSO
+    assert results[0].semaforo_color == SemaforoColor.AMARILLO
+
+
 def test_search_projects_sin_coincidencias_devuelve_lista_vacia(db_session):
     _make_project(db_session)
 
     results = project_service.search_projects(db_session, "no-existe-este-criterio")
 
     assert results == []
+
+
+GM_PAYLOAD = ProjectCreate(
+    crp_prefix="GM",
+    tipo="GM - Importación",
+    cliente="Residencias El Pinar",
+    ciudad="Pereira",
+    producto="SSE Recta",
+    marca="Stannah",
+    modulos=[
+        ModuleStatusIn(modulo=Modulo.COMERCIAL, estado=EstadoEtapa.CERRADO),
+        ModuleStatusIn(modulo=Modulo.REG_MAESTRO, estado=EstadoEtapa.CERRADO),
+        ModuleStatusIn(modulo=Modulo.IMPORTACIONES, estado=EstadoEtapa.EN_CURSO),
+        ModuleStatusIn(modulo=Modulo.TECNICO, estado=EstadoEtapa.PENDIENTE),
+    ],
+    evento_origen="Comercial",
+    evento_mensaje="Venta cerrada · lead MOB26-018 · $45.000.000",
+)
+
+
+# Escenario 1 (E2-H4): clasificación GM crea el Registro Maestro.
+def test_create_project_genera_codigo_con_prefijo_y_anio(db_session):
+    project = project_service.create_project(db_session, GM_PAYLOAD)
+
+    assert project.crp_code.startswith("GM")
+    assert project.crp_code.endswith("-01")
+    assert len(project.module_statuses) == 4
+    assert len(project.events) == 2  # "Venta cerrada" (Comercial) + "Código generado" (Sistema)
+
+
+def test_create_project_incrementa_el_consecutivo_por_prefijo_y_anio(db_session):
+    primero = project_service.create_project(db_session, GM_PAYLOAD)
+    segundo = project_service.create_project(db_session, GM_PAYLOAD)
+
+    assert primero.crp_code != segundo.crp_code
+    assert segundo.crp_code.endswith("-02")
+
+
+def test_create_project_prefijos_distintos_llevan_contadores_independientes(db_session):
+    gm = project_service.create_project(db_session, GM_PAYLOAD)
+    stock_payload = GM_PAYLOAD.model_copy(update={"crp_prefix": "STMB", "tipo": "Stock - Mobility"})
+    stock = project_service.create_project(db_session, stock_payload)
+
+    assert gm.crp_code.startswith("GM")
+    assert stock.crp_code.startswith("STMB")
+    assert stock.crp_code.endswith("-01")
+
+
+def test_create_project_prefijo_invalido_lanza_error():
+    with pytest.raises(ValidationError, match="Prefijo inválido"):
+        ProjectCreate(**{**GM_PAYLOAD.model_dump(), "crp_prefix": "XYZ"})
+
+
+# --- E3-H1: generación automática del código de proyecto -------------------
+# La lógica ya existe desde E2-H4 (_next_project_code, con SELECT ... FOR
+# UPDATE); estas pruebas documentan explícitamente los escenarios de E3-H1.
+
+
+# Escenario 1: generación de código GM.
+def test_e3h1_codigo_tiene_formato_prefijo_anio_consecutivo(db_session):
+    project = project_service.create_project(db_session, GM_PAYLOAD)
+
+    import re
+
+    assert re.fullmatch(r"GM\d{2}-\d{2}", project.crp_code)
+
+
+def test_e3h1_codigo_es_unico_por_prefijo(db_session):
+    codigos = {project_service.create_project(db_session, GM_PAYLOAD).crp_code for _ in range(5)}
+    assert len(codigos) == 5
+
+
+def test_e3h1_registro_maestro_queda_poblado_con_los_datos_del_lead(db_session):
+    project = project_service.create_project(db_session, GM_PAYLOAD)
+
+    assert project.cliente == GM_PAYLOAD.cliente
+    assert project.ciudad == GM_PAYLOAD.ciudad
+    assert project.producto == GM_PAYLOAD.producto
+    assert project.marca == GM_PAYLOAD.marca
+    assert project.tipo == GM_PAYLOAD.tipo
+
+
+# Escenario 2: concurrencia — dos ventas simultáneas no reciben el mismo
+# consecutivo. SQLite no soporta el mismo locking transaccional que Postgres
+# (donde corre en producción vía SELECT ... FOR UPDATE), así que aquí se
+# valida el efecto observable: consecutivos estrictamente secuenciales sin
+# huecos ni repeticiones al generar varios códigos seguidos.
+def test_e3h1_concurrencia_cada_venta_recibe_consecutivo_unico(db_session):
+    codigos = [project_service.create_project(db_session, GM_PAYLOAD).crp_code for _ in range(10)]
+    numeros = [int(c.split("-")[1]) for c in codigos]
+    assert numeros == list(range(1, 11))
+
+
+# Restricción: una vez generado, el código no se puede editar — no existe
+# ningún endpoint de actualización de crp_code (services/projects/app/routers
+# solo expone GET /projects/search, GET /projects/{crp_code} y POST
+# /projects); create_project tampoco acepta un crp_code explícito en el
+# payload (ProjectCreate no define ese campo).
+def test_e3h1_projectcreate_no_permite_fijar_el_codigo_manualmente():
+    assert "crp_code" not in ProjectCreate.model_fields
