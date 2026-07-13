@@ -135,6 +135,28 @@ export default function FinancieroPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [fechasPagoCxp, setFechasPagoCxp] = useState<Record<string, string>>({});
+  const [cxpPagoSaving, setCxpPagoSaving] = useState<string | null>(null);
+
+  async function handleMarcarCxpPagada(item: CuentaPorPagar) {
+    const fechaPago = fechasPagoCxp[item.id];
+    if (!fechaPago) return;
+    setCxpError(null);
+    setCxpPagoSaving(item.id);
+    try {
+      await projectsApiFetch(`/projects/${encodeURIComponent(item.crp_code)}/logistica/${item.id}/pago`, {
+        method: "PATCH",
+        token,
+        body: { fecha_pago: fechaPago },
+      });
+      await loadCxp();
+    } catch (err) {
+      setCxpError(err instanceof ApiError ? err.message : "No se pudo marcar el gasto como pagado");
+    } finally {
+      setCxpPagoSaving(null);
+    }
+  }
+
   async function handleSearch(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -645,6 +667,7 @@ export default function FinancieroPage() {
                     <th>Monto (COP)</th>
                     <th>Vencimiento</th>
                     <th>Estado</th>
+                    <th>Marcar pagada</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -663,6 +686,26 @@ export default function FinancieroPage() {
                         <span className={`badge ${i.estado === "PAGADA" ? "badge-status-activo" : "badge-role"}`}>
                           {i.estado === "PAGADA" ? "Pagada" : "Pendiente"}
                         </span>
+                      </td>
+                      <td>
+                        {i.estado === "PENDIENTE" && (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <input
+                              type="date"
+                              style={{ width: 130 }}
+                              onChange={(e) =>
+                                setFechasPagoCxp((prev) => ({ ...prev, [i.id]: e.target.value }))
+                              }
+                            />
+                            <button
+                              className="btn-primary"
+                              disabled={cxpPagoSaving === i.id || !fechasPagoCxp[i.id]}
+                              onClick={() => handleMarcarCxpPagada(i)}
+                            >
+                              {cxpPagoSaving === i.id ? "..." : "Marcar pagada"}
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

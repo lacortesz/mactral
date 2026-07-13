@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.domain import Modulo, Rol, TipoGastoLogistico
-from app.schemas import CuentaPorPagarCreate, ModuleStatusIn, ProjectCreate
+from app.schemas import CuentaPorPagarCreate, CuentaPorPagarPagoCreate, ModuleStatusIn, ProjectCreate
 from app.services import financiero_service, logistica_service, project_service
 
 
@@ -183,3 +183,70 @@ def test_get_gasto_attachment_de_gasto_sin_soporte(db_session):
 
     found = logistica_service.get_gasto_attachment(db_session, project.crp_code, cxp.id)
     assert found.tiene_soporte is False
+
+
+# Marcar una cuenta por pagar (gasto logístico) como pagada.
+def test_marcar_gasto_logistico_como_pagado(db_session):
+    project = _make_project(db_session)
+    cxp = logistica_service.registrar_gasto_logistico(db_session, ADMIN_LOGISTICA, project.crp_code, VUELO_PAYLOAD)
+
+    updated = logistica_service.marcar_pagada(
+        db_session, ADMIN_LOGISTICA, project.crp_code, cxp.id, CuentaPorPagarPagoCreate(fecha_pago=date(2026, 8, 1))
+    )
+
+    assert updated.estado.value == "PAGADA"
+    assert updated.fecha_pago == date(2026, 8, 1)
+    detail = project_service.get_project_detail(db_session, project.crp_code, Rol.ADMINISTRATIVO)
+    assert any("Gasto logístico pagado" in e.mensaje for e in detail.linea_de_tiempo)
+
+
+def test_marcar_gasto_logistico_como_pagado_actualiza_el_consolidado(db_session):
+    project = _make_project(db_session)
+    cxp = logistica_service.registrar_gasto_logistico(db_session, ADMIN_LOGISTICA, project.crp_code, VUELO_PAYLOAD)
+    logistica_service.marcar_pagada(
+        db_session, ADMIN_LOGISTICA, project.crp_code, cxp.id, CuentaPorPagarPagoCreate(fecha_pago=date(2026, 8, 1))
+    )
+
+    consolidado = financiero_service.list_cuentas_por_pagar(db_session, ADMIN_LOGISTICA, crp_code=project.crp_code)
+    assert consolidado.total_pagado_cop == 1_500_000
+    assert consolidado.total_pendiente_cop == 0
+
+
+def test_marcar_gasto_ya_pagado_lanza_error(db_session):
+    project = _make_project(db_session)
+    cxp = logistica_service.registrar_gasto_logistico(db_session, ADMIN_LOGISTICA, project.crp_code, VUELO_PAYLOAD)
+    logistica_service.marcar_pagada(
+        db_session, ADMIN_LOGISTICA, project.crp_code, cxp.id, CuentaPorPagarPagoCreate(fecha_pago=date(2026, 8, 1))
+    )
+
+    with pytest.raises(logistica_service.GastoYaPagadoError):
+        logistica_service.marcar_pagada(
+            db_session, ADMIN_LOGISTICA, project.crp_code, cxp.id, CuentaPorPagarPagoCreate(fecha_pago=date(2026, 8, 2))
+        )
+
+
+def test_marcar_gasto_inexistente_lanza_error(db_session):
+    project = _make_project(db_session)
+    with pytest.raises(logistica_service.GastoLogisticoNotFoundError):
+        logistica_service.marcar_pagada(
+            db_session, ADMIN_LOGISTICA, project.crp_code, "no-existe", CuentaPorPagarPagoCreate(fecha_pago=date(2026, 8, 1))
+        )
+
+
+def test_marcar_gasto_otro_rol_lanza_forbidden(db_session):
+    project = _make_project(db_session)
+    cxp = logistica_service.registrar_gasto_logistico(db_session, ADMIN_LOGISTICA, project.crp_code, VUELO_PAYLOAD)
+    with pytest.raises(project_service.ForbiddenError):
+        logistica_service.marcar_pagada(
+            db_session, OTRO_ROL, project.crp_code, cxp.id, CuentaPorPagarPagoCreate(fecha_pago=date(2026, 8, 1))
+        )
+
+
+def test_gerencia_puede_marcar_gasto_como_pagado(db_session):
+    project = _make_project(db_session)
+    cxp = logistica_service.registrar_gasto_logistico(db_session, ADMIN_LOGISTICA, project.crp_code, VUELO_PAYLOAD)
+
+    updated = logistica_service.marcar_pagada(
+        db_session, GERENCIA, project.crp_code, cxp.id, CuentaPorPagarPagoCreate(fecha_pago=date(2026, 8, 1))
+    )
+    assert updated.estado.value == "PAGADA"

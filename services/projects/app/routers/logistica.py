@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import CurrentUser, get_current_user
-from app.schemas import CuentaPorPagarCreate, CuentaPorPagarOut
+from app.schemas import CuentaPorPagarCreate, CuentaPorPagarOut, CuentaPorPagarPagoCreate
 from app.services import logistica_service, project_service
 
 router = APIRouter(prefix="/projects/{crp_code}/logistica", tags=["logistica"])
@@ -55,6 +55,27 @@ def registrar_gasto_logistico(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except project_service.ForbiddenError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.patch("/{gasto_id}/pago", response_model=CuentaPorPagarOut)
+def marcar_pagada(
+    crp_code: str,
+    gasto_id: str,
+    payload: CuentaPorPagarPagoCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    try:
+        cxp = logistica_service.marcar_pagada(db, current_user, crp_code, gasto_id, payload)
+        return _to_out(cxp)
+    except project_service.ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except project_service.ForbiddenError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except logistica_service.GastoLogisticoNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except logistica_service.GastoYaPagadoError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.patch("/{gasto_id}/soporte", response_model=CuentaPorPagarOut)

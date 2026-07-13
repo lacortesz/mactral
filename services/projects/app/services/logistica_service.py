@@ -7,9 +7,9 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from app.domain import Rol, can_manage_logistica
+from app.domain import EstadoCuentaPorPagar, Rol, can_manage_logistica
 from app.models import CuentaPorPagar, ProjectEvent
-from app.schemas import CuentaPorPagarCreate
+from app.schemas import CuentaPorPagarCreate, CuentaPorPagarPagoCreate
 from app.services.project_service import ForbiddenError, get_project_by_code
 
 
@@ -20,6 +20,10 @@ class Actor(Protocol):
 
 
 class GastoLogisticoNotFoundError(Exception):
+    pass
+
+
+class GastoYaPagadoError(Exception):
     pass
 
 
@@ -64,6 +68,36 @@ def registrar_gasto_logistico(db: Session, actor: Actor, crp_code: str, data: Cu
             origen="Logística",
             mensaje=f"Gasto logístico registrado: {data.tipo.value} — {data.proveedor} — "
             f"{data.moneda} {data.monto:,.0f}".replace(",", "."),
+        )
+    )
+    db.commit()
+    db.refresh(cxp)
+    return cxp
+
+
+def marcar_pagada(
+    db: Session, actor: Actor, crp_code: str, gasto_id: str, data: CuentaPorPagarPagoCreate
+) -> CuentaPorPagar:
+    """Marca un gasto logístico (cuenta por pagar) como pagado."""
+    if not can_manage_logistica(actor.role):
+        raise ForbiddenError("Solo Administrativo (Logística) o Gerencia pueden marcar un gasto como pagado.")
+
+    project = get_project_by_code(db, crp_code)
+    cxp = _get_gasto(project, gasto_id)
+    if cxp.estado == EstadoCuentaPorPagar.PAGADA:
+        raise GastoYaPagadoError("Este gasto logístico ya está marcado como pagado.")
+
+    cxp.estado = EstadoCuentaPorPagar.PAGADA
+    cxp.fecha_pago = data.fecha_pago
+
+    db.add(
+        ProjectEvent(
+            project_id=project.id,
+            fecha=datetime.utcnow(),
+            origen="Logística",
+            mensaje=f"Gasto logístico pagado: {cxp.proveedor} — {cxp.concepto} — {cxp.moneda} {cxp.monto:,.0f}".replace(
+                ",", "."
+            ),
         )
     )
     db.commit()
