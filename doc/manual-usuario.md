@@ -158,6 +158,11 @@ Gestión de cuotas, cobros y el tablero financiero de cada proyecto.
 6. **Cuentas por pagar (consolidado)**: todos los gastos logísticos de
    todos los proyectos, con filtros por proveedor, moneda y estado, y
    totales pendiente/pagado.
+7. **Marcar una cuenta por pagar como pagada**: en cualquier fila
+   pendiente del consolidado, ingresar la fecha de pago y hacer clic en
+   "Marcar pagada". El estado cambia a Pagada, se registra en la línea de
+   tiempo del proyecto y el total pagado/pendiente del consolidado se
+   actualiza de inmediato. Una cuenta ya pagada no admite un segundo pago.
 
 ## 11. Módulo Logística
 
@@ -169,7 +174,10 @@ proyecto (vuelos, hospedaje, transporte, viáticos).
    del Gerente General**; sin ella, el sistema rechaza el registro.
 2. **Adjuntar el soporte** (factura/comprobante) una vez registrado el
    gasto.
-3. Cada gasto queda automáticamente imputado al proyecto: aparece en su
+3. **Marcar como pagado**: en un gasto pendiente, ingresar la fecha de
+   pago y hacer clic en "Marcar pagada" (misma acción disponible también
+   desde el consolidado de Financiero).
+4. Cada gasto queda automáticamente imputado al proyecto: aparece en su
    margen bruto (módulo Financiero) y en el consolidado de cuentas por
    pagar, sin ningún paso adicional.
 
